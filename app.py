@@ -2,293 +2,142 @@ import streamlit as st
 import sqlite3
 import pandas as pd
 from datetime import datetime
+import plotly.express as px
+from io import BytesIO
+from contextlib import contextmanager
+import os
 
-# Page Configuration with wide layout
-st.set_page_config(page_title="Association Management Dashboard", layout="wide", page_icon="🏢")
+# ====================== إعدادات الصفحة والواجهة ======================
+st.set_page_config(
+    page_title="نظام إدارة جمعية الحياة والأمل - السحابي الموحد",
+    layout="wide",
+    page_icon="🏢",
+    initial_sidebar_state="expanded"
+)
 
-# ====================== Modern CSS Styling ======================
+# ====================== نظام التصميم والبصريات (CSS) ======================
 st.markdown("""
-    <style>
-    /* Global Font and Text Alignment for English UI */
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-    html, body, [data-testid="stWidgetFormSubmitButton"], .stMarkdown, .stSelectbox, .stTextInput, .stButton {
-        font-family: 'Inter', sans-serif !important;
-        direction: ltr;
-        text-align: left;
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght=400;600;700&display=swap');
+    
+    html, body, [data-testid="stWidgetFormSubmitButton"], .stMarkdown, .stSelectbox, .stTextInput, .stButton, .stTabs {
+        font-family: 'Cairo', sans-serif !important;
+        direction: rtl;
+        text-align: right;
     }
     
-    /* Modern Dashboard Metric Cards */
-    .metric-card {
-        background-color: #ffffff;
-        padding: 20px;
-        border-radius: 12px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-        border-left: 5px solid #1E3A8A; /* Professional Dark Blue */
-        margin-bottom: 15px;
+    .stMetric {
+        background: #ffffff !important;
+        padding: 20px !important;
+        border-radius: 12px !important;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.02) !important;
+        border: 1px solid #E5E7EB !important;
+        border-right: 5px solid #0066cc !important;
     }
-    .metric-card.success { border-left-color: #10B981; } /* Green */
-    .metric-card.warning { border-left-color: #F59E0B; } /* Orange */
-    .metric-card.danger { border-left-color: #EF4444; } /* Red */
     
-    .metric-title { font-size: 14px; color: #6B7280; font-weight: 500; margin-bottom: 5px; }
-    .metric-value { font-size: 24px; color: #111827; font-weight: 700; }
+    .alert-box {
+        padding: 14px;
+        border-radius: 10px;
+        margin: 10px 0;
+        font-weight: 500;
+        border-right: 5px solid;
+    }
     
-    /* Input Elements and UI Refinements */
-    .stButton>button {
-        border-radius: 8px !important;
-        font-weight: 500 !important;
+    .alert-danger { background-color: #FEF2F2; border-right-color: #EF4444; color: #991B1B; }
+    .alert-warning { background-color: #FFFBEB; border-right-color: #F59E0B; color: #92400E; }
+    .alert-success { background-color: #F0FDF4; border-right-color: #10B981; color: #065F46; }
+    .alert-info { background-color: #EFF6FF; border-right-color: #3B82F6; color: #1E40AF; }
+    
+    h1 { color: #d32f2f; text-align: center; font-weight: 700; } /* تم تعديل اللون ليتناسق مع هوية الشعار الأحمر */
+    h2, h3 { color: #1E3A8A; font-weight: 600; }
+    
+    /* مظهر مخصص لمركزية الشعار في القائمة الجانبية */
+    [data-testid="stSidebar"] .stImage {
+        text-align: center;
+        display: flex;
+        justify-content: center;
+        margin-bottom: 10px;
     }
-    div[data-testid="stExpander"] {
-        border-radius: 8px !important;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
-    }
-    </style>
+</style>
 """, unsafe_allow_html=True)
 
-# ====================== Database Initialization & Automation ======================
-def init_db():
-    with sqlite3.connect('association.db') as conn:
-        c = conn.cursor()
-        c.execute('''CREATE TABLE IF NOT EXISTS project_employees 
-                     (id INTEGER PRIMARY KEY, project_type TEXT, name TEXT, national_id TEXT, phone TEXT, job_title TEXT)''')
-        c.execute('''CREATE TABLE IF NOT EXISTS suppliers 
-                     (id INTEGER PRIMARY KEY, name TEXT, category TEXT, phone TEXT, email TEXT, address TEXT)''')
-        c.execute('''CREATE TABLE IF NOT EXISTS invoices 
-                     (id INTEGER PRIMARY KEY, supplier_id INTEGER, item_name TEXT, qty INTEGER, total_price REAL, status TEXT, details TEXT, date TEXT)''')
-        c.execute('''CREATE TABLE IF NOT EXISTS inventory 
-                     (id INTEGER PRIMARY KEY, item_name TEXT, category TEXT, quantity INTEGER, status TEXT, last_updated TEXT)''')
-        conn.commit()
+# ====================== محرك إدارة قاعدة البيانات والأتمتة ======================
+class AssociationDatabase:
+    def __init__(self, db_name='association_pro.db'):
+        self.db_name = db_name
+        self.init_db()
 
-init_db()
+    @contextmanager
+    def connection(self):
+        conn = sqlite3.connect(self.db_name, timeout=10)
+        conn.row_factory = sqlite3.Row
+        try:
+            yield conn
+        finally:
+            conn.close()
 
-# Smart Automation Function to sync purchased items with the inventory
-def autocomplete_inventory(item_name, qty):
-    update_time = datetime.now().strftime("%Y-%m-%d %H:%M")
-    with sqlite3.connect('association.db') as conn:
-        c = conn.cursor()
-        # Check if the item already exists in the inventory
-        c.execute("SELECT id, quantity FROM inventory WHERE LOWER(item_name) = LOWER(?)", (item_name,))
-        result = c.fetchone()
-        
-        if result:
-            new_qty = result[1] + qty
-            status = "In Stock / Good Condition" if new_qty >= 5 else "Low Stock (Reorder Urgent)"
-            c.execute("UPDATE inventory SET quantity = ?, status = ?, last_updated = ? WHERE id = ?", (new_qty, status, update_time, result[0]))
-        else:
-            status = "In Stock / Good Condition" if qty >= 5 else "Low Stock (Reorder Urgent)"
-            c.execute("INSERT INTO inventory (item_name, category, quantity, status, last_updated) VALUES (?, 'Stationery & Office Supplies', ?, ?, ?)", 
-                      (item_name, qty, status, update_time))
-        conn.commit()
+    def init_db(self):
+        with self.connection() as conn:
+            c = conn.cursor()
+            # 1. جدول الأصول والمستودع
+            c.execute('''CREATE TABLE IF NOT EXISTS assets 
+                         (id INTEGER PRIMARY KEY AUTOINCREMENT, asset_type TEXT NOT NULL, name TEXT UNIQUE NOT NULL, 
+                          quantity INTEGER NOT NULL, location TEXT NOT NULL, status TEXT NOT NULL, 
+                          min_quantity INTEGER DEFAULT 5, date_added TEXT NOT NULL, notes TEXT)''')
+            # 2. جدول الموردين
+            c.execute('''CREATE TABLE IF NOT EXISTS suppliers 
+                         (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, category TEXT NOT NULL, 
+                          phone TEXT NOT NULL, email TEXT, address TEXT, rating INTEGER DEFAULT 5, date_added TEXT NOT NULL)''')
+            # 3. جدول الموظفين
+            c.execute('''CREATE TABLE IF NOT EXISTS employees 
+                         (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, national_id TEXT UNIQUE NOT NULL, 
+                          phone TEXT NOT NULL, job_title TEXT NOT NULL, department TEXT NOT NULL, salary REAL, 
+                          status TEXT DEFAULT '🟢 نشط برأس عمله', date_added TEXT NOT NULL)''')
+            # 4. جدول الطلبيات والمشتريات
+            c.execute('''CREATE TABLE IF NOT EXISTS orders 
+                         (id INTEGER PRIMARY KEY AUTOINCREMENT, supplier_id INTEGER NOT NULL, item_name TEXT NOT NULL, 
+                          qty INTEGER NOT NULL, unit_price REAL, total_price REAL, status TEXT NOT NULL, 
+                          order_date TEXT NOT NULL, notes TEXT, FOREIGN KEY(supplier_id) REFERENCES suppliers(id))''')
+            # 5. جدول الصيانة الجدولية
+            c.execute('''CREATE TABLE IF NOT EXISTS maintenance 
+                         (id INTEGER PRIMARY KEY AUTOINCREMENT, asset_id INTEGER NOT NULL, m_type TEXT NOT NULL, 
+                          description TEXT, m_date TEXT NOT NULL, next_m_date TEXT, cost REAL, status TEXT DEFAULT '⏳ مجدولة',
+                          FOREIGN KEY(asset_id) REFERENCES assets(id))''')
+            # 6. جدول التنبيهات الذكية
+            c.execute('''CREATE TABLE IF NOT EXISTS alerts 
+                         (id INTEGER PRIMARY KEY AUTOINCREMENT, alert_type TEXT NOT NULL, title TEXT NOT NULL, 
+                          message TEXT NOT NULL, severity TEXT DEFAULT 'معلومة', is_read INTEGER DEFAULT 0, created_at TEXT NOT NULL)''')
+            # 7. سجل التدقيق والحركات الامنية
+            c.execute('''CREATE TABLE IF NOT EXISTS activity_log 
+                         (id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT NOT NULL, table_name TEXT NOT NULL, 
+                          details TEXT, timestamp TEXT NOT NULL)''')
+            conn.commit()
 
-# ====================== Main Dashboard Header ======================
-st.markdown("<h1 style='color: #1E3A8A; font-size: 32px; font-weight: 700; margin-bottom: 5px;'>🏢 Association Cloud Platform</h1>", unsafe_allow_html=True)
-st.markdown("<p style='color: #6B7280; font-size: 16px; margin-bottom: 25px;'>Advanced Management Information System for Procurement, Inventory, and Field Operations</p>", unsafe_allow_html=True)
-st.divider()
+    def log_activity(self, action, table_name, details=""):
+        with self.connection() as conn:
+            conn.execute("INSERT INTO activity_log (action, table_name, details, timestamp) VALUES (?, ?, ?, ?)",
+                         (action, table_name, details, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+            conn.commit()
 
-# Main Project Tabs
-tab_projects, tab_suppliers, tab_inventory = st.tabs([
-    "📁 Project Sectors & Staff", 
-    "🧾 Suppliers & Smart Invoices", 
-    "📦 Central Office Inventory"
-])
+    def create_alert(self, alert_type, title, message, severity="معلومة"):
+        with self.connection() as conn:
+            conn.execute("INSERT INTO alerts (alert_type, title, message, severity, created_at) VALUES (?, ?, ?, ?, ?)",
+                         (alert_type, title, message, severity, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+            conn.commit()
 
-# ================== 1. Project Sectors & Staff Tab ==================
-with tab_projects:
-    st.markdown("<h3 style='color: #1E3A8A;'>🛠️ Staff & Field Operations Management</h3>", unsafe_allow_html=True)
-    
-    proj_tabs = st.tabs(["🏠 Shelter Sector", "💳 CVA Sector", "📊 MEAL Sector"])
-    project_details = [
-        {"tab": proj_tabs[0], "name": "Shelter", "icon": "🏠"},
-        {"tab": proj_tabs[1], "name": "CVA", "icon": "💳"},
-        {"tab": proj_tabs[2], "name": "MEAL", "icon": "📊"}
-    ]
-    
-    for idx, project in enumerate(project_details):
-        with project["tab"]:
-            st.markdown(f"<h4>{project['icon']} {project['name']} Project Team</h4>", unsafe_allow_html=True)
-            
-            # Expandable Registration Form
-            with st.expander(f"➕ Register New Staff Member for {project['name']}", expanded=False):
-                with st.form(f"form_emp_{project['name']}"):
-                    c1, c2 = st.columns(2)
-                    with c1:
-                        emp_name = st.text_input("Full Name")
-                        emp_national_id = st.text_input("National ID / Passport Number")
-                    with c2:
-                        emp_phone = st.text_input("Phone Number")
-                        emp_job_title = st.text_input("Job Title / Role")
-                    
-                    if st.form_submit_button("Save Staff Member"):
-                        if emp_name and emp_national_id:
-                            with sqlite3.connect('association.db') as conn:
-                                conn.execute("INSERT INTO project_employees (project_type, name, national_id, phone, job_title) VALUES (?,?,?,?,?)", 
-                                             (project['name'], emp_name, emp_national_id, emp_phone, emp_job_title))
-                                conn.commit()
-                            st.success("✅ Staff member registered successfully!")
-                            st.rerun()
-            
-            # Fetch and Display Team Data
-            with sqlite3.connect('association.db') as conn:
-                df_emp = pd.read_sql_query("SELECT id, name, national_id, phone, job_title FROM project_employees WHERE project_type = ?", conn, params=(project['name'],))
-            
-            if not df_emp.empty:
-                st.dataframe(df_emp, use_container_width=True, hide_index=True)
-                
-                # Modern CSV Export Options
-                csv_emp = df_emp.to_csv(index=False).encode('utf-8')
-                st.download_button(label="📥 Download Staff Roster (CSV)", data=csv_emp, file_name=f"employees_{project['name']}.csv", mime='text/csv')
-            else:
-                st.info(f"No active staff recorded in the {project['name']} sector yet.")
+    def add_asset(self, asset_type, name, qty, location, status, min_qty, notes):
+        try:
+            with self.connection() as conn:
+                conn.execute("""INSERT INTO assets (asset_type, name, quantity, location, status, min_quantity, date_added, notes) 
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                             (asset_type, name.strip(), qty, location.strip(), status, min_qty, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), notes.strip()))
+                conn.commit()
+            self.log_activity("إضافة", "assets", f"إضافة مادة مستودعية: {name}")
+            return True, "تم حفظ الأصل والمادة بنجاح في المستودع!"
+        except sqlite3.IntegrityError:
+            return False, "⚠️ اسم هذا الأصل مسجل مسبقاً، يرجى استخدام اسم مميز أو تحديث كمية الحالي."
 
-# ================== 2. Suppliers & Invoices Tab ==================
-with tab_suppliers:
-    st.markdown("<h3 style='color: #1E3A8A;'>🏪 Procurement & Vendor Management</h3>", unsafe_allow_html=True)
-    sub_tab_supp, sub_tab_inv = st.tabs(["📋 Approved Vendor Directory", "🧾 Orders & Cost Invoices"])
-    
-    with sub_tab_supp:
-        with st.form("supplier_form"):
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                s_name = st.text_input("Company / Vendor Name")
-                s_category = st.selectbox("Category of Supply", ["Electronic Devices", "Stationery & Office Supplies", "Construction & Maintenance Material", "General Services"])
-            with col2:
-                s_phone = st.text_input("Contact Number")
-                s_email = st.text_input("Email Address")
-            with col3:
-                s_address = st.text_input("Office Headquarters / Address")
-            
-            if st.form_submit_button("Approve & Add Vendor"):
-                if s_name and s_phone:
-                    with sqlite3.connect('association.db') as conn:
-                        conn.execute("INSERT INTO suppliers (name, category, phone, email, address) VALUES (?, ?, ?, ?, ?)", (s_name, s_category, s_phone, s_email, s_address))
-                        conn.commit()
-                    st.success("✅ Vendor successfully listed in the directory!")
-                    st.rerun()
-        
-        st.divider()
-        with sqlite3.connect('association.db') as conn:
-            df_suppliers = pd.read_sql_query("SELECT * FROM suppliers", conn)
-        if not df_suppliers.empty:
-            st.dataframe(df_suppliers, use_container_width=True, hide_index=True)
-
-    with sub_tab_inv:
-        with sqlite3.connect('association.db') as conn:
-            suppliers_df = pd.read_sql_query("SELECT id, name FROM suppliers", conn)
-            
-        if suppliers_df.empty:
-            st.warning("⚠️ No vendors found. Please add a vendor from the Approved Directory tab before registering invoices.")
-        else:
-            supplier_mapping = dict(zip(suppliers_df['name'], suppliers_df['id']))
-            with st.form("invoice_form"):
-                col1, col2 = st.columns(2)
-                with col1:
-                    chosen_supplier = st.selectbox("Select Vendor", suppliers_df['name'].tolist())
-                    inv_item_name = st.text_input("Item / Service Description (e.g., Premium A4 Paper)")
-                    inv_qty = st.number_input("Quantity Ordered", min_value=1, value=1)
-                with col2:
-                    inv_price = st.number_input("Total Invoice Amount (Tax Included)", min_value=0.0)
-                    inv_status = st.selectbox("Financial & Delivery Status", ["Pending Processing/Order", "Paid in Full & Received into Inventory", "On Credit / Unpaid"])
-                    inv_details = st.text_area("Additional Terms or Specifications")
-                    
-                if st.form_submit_button("Record Invoice & Log Cost"):
-                    if inv_item_name and inv_price > 0:
-                        s_id = supplier_mapping[chosen_supplier]
-                        current_date = datetime.now().strftime("%Y-%m-%d %H:%M")
-                        with sqlite3.connect('association.db') as conn:
-                            conn.execute("INSERT INTO invoices (supplier_id, item_name, qty, total_price, status, details, date) VALUES (?,?,?,?,?,?,?)",
-                                         (s_id, inv_item_name, inv_qty, inv_price, inv_status, inv_details, current_date))
-                            conn.commit()
-                        
-                        # Smart Automation Trigger
-                        if inv_status == "Paid in Full & Received into Inventory":
-                            autocomplete_inventory(inv_item_name, inv_qty)
-                            st.info("🤖 System Automation: Quantities have been automatically pushed to the office inventory ledger!")
-                            
-                        st.success("✅ Financial invoice logged successfully!")
-                        st.rerun()
-        
-        st.divider()
-        with sqlite3.connect('association.db') as conn:
-            df_invoices = pd.read_sql_query("""
-                SELECT i.id, s.name as supplier_name, i.item_name, i.qty, i.total_price, i.status, i.date 
-                FROM invoices i LEFT JOIN suppliers s ON i.supplier_id = s.id
-            """, conn)
-            
-        if not df_invoices.empty:
-            # Modern Analytic Metric Cards
-            m_col1, m_col2, m_col3 = st.columns(3)
-            with m_col1:
-                st.markdown(f'<div class="metric-card"><div class="metric-title">Total Logs Filed</div><div class="metric-value">{len(df_invoices)}</div></div>', unsafe_allow_html=True)
-            with m_col2:
-                st.markdown(f'<div class="metric-card success"><div class="metric-title">Total Financial Expenditure</div><div class="metric-value">${df_invoices["total_price"].sum():,.2f}</div></div>', unsafe_allow_html=True)
-            with m_col3:
-                pending_inv = len(df_invoices[df_invoices['status'] == 'Pending Processing/Order'])
-                st.markdown(f'<div class="metric-card warning"><div class="metric-title">Pending Orders</div><div class="metric-value">{pending_inv}</div></div>', unsafe_allow_html=True)
-            
-            st.markdown("<br>", unsafe_allow_html=True)
-            st.dataframe(df_invoices, use_container_width=True, hide_index=True)
-            
-            csv_inv = df_invoices.to_csv(index=False).encode('utf-8')
-            st.download_button(label="📥 Export Procurement Ledger (CSV)", data=csv_inv, file_name="invoice_report.csv", mime='text/csv')
-
-# ================== 3. Central Office Inventory Tab ==================
-with tab_inventory:
-    st.markdown("<h3 style='color: #1E3A8A;'>📦 Office Stock Audit & Stationery Ledger</h3>", unsafe_allow_html=True)
-    
-    # Automatic Stock Threshold Alert System
-    with sqlite3.connect('association.db') as conn:
-        df_inventory = pd.read_sql_query("SELECT * FROM inventory", conn)
-        
-    if not df_inventory.empty:
-        low_stock_items = df_inventory[df_inventory['quantity'] < 5]['item_name'].tolist()
-        if low_stock_items:
-            st.markdown(f"""
-            <div style="background-color: #FEF2F2; color: #991B1B; padding: 15px; border-radius: 8px; border-left: 5px solid #EF4444; font-weight: 500; margin-bottom: 20px;">
-                ⚠️ <b>Critical Stock Warning:</b> The following assets are running out (Quantity under 5 units): {', '.join(low_stock_items)}
-            </div>
-            """, unsafe_allow_html=True)
-    
-    with st.form("inventory_form"):
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            inv_name = st.text_input("Asset Name (e.g., HP Printer Ink 652)")
-        with col2:
-            inv_cat = st.selectbox("Stock Classification", ["Stationery & Office Supplies", "Ink & Printer Consumables", "Cleaning & Sanitizing Materials", "Office Hospitality & Snacks"])
-        with col3:
-            inv_quantity = st.number_input("Initial Available Stock", min_value=0, value=1)
-            
-        if st.form_submit_button("Manually Restock Shelf"):
-            if inv_name:
-                update_time = datetime.now().strftime("%Y-%m-%d %H:%M")
-                status = "In Stock / Good Condition" if inv_quantity >= 5 else "Low Stock (Reorder Urgent)"
-                with sqlite3.connect('association.db') as conn:
-                    conn.execute("INSERT INTO inventory (item_name, category, quantity, status, last_updated) VALUES (?, ?, ?, ?, ?)",
-                                 (inv_name, inv_cat, inv_quantity, status, update_time))
-                    conn.commit()
-                st.success("✅ Stock tracking metrics updated!")
-                st.rerun()
-                
-    st.divider()
-    if not df_inventory.empty:
-        # Inventory Analytics
-        i_col1, i_col2 = st.columns(2)
-        with i_col1:
-            st.markdown(f'<div class="metric-card"><div class="metric-title">Unique SKUs Tracked</div><div class="metric-value">{len(df_inventory)}</div></div>', unsafe_allow_html=True)
-        with i_col2:
-            st.markdown(f'<div class="metric-card danger"><div class="metric-title">Items Requiring Reorder</div><div class="metric-value">{len(df_inventory[df_inventory["quantity"] < 5])}</div></div>', unsafe_allow_html=True)
-            
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.dataframe(df_inventory, use_container_width=True, hide_index=True)
-        
-        csv_inv = df_inventory.to_csv(index=False).encode('utf-8')
-        st.download_button(label="📥 Download Full Stock Audit Sheet", data=csv_inv, file_name="inventory_status.csv", mime='text/csv')
-    else:
-        st.info("No corporate assets or stationery supplies currently recorded in the warehouse.")
-
-# ================== Footer ==================
-st.divider()
-st.markdown("""
-<div style="text-align: center; padding: 15px; color: #9CA3AF; font-size: 14px;">
-    <p>💼 Association Cloud Platform | Modernized English Layout & Secured Infrastructure © 2026</p>
-</div>
-""", unsafe_allow_html=True)
+    def add_supplier(self, name, category, phone, email, address, rating):
+        try:
+            with self.connection() as conn:
+                conn.execute("""INSERT INTO suppliers (name

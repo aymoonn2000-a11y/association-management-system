@@ -3,276 +3,299 @@ import sqlite3
 import pandas as pd
 from datetime import datetime
 
-st.set_page_config(page_title="نظام إدارة الجمعية", layout="wide", page_icon="🏢")
+# إعداد الصفحة وتوجيه النص من اليمين إلى اليسار (RTL) لدعم اللغة العربية
+st.set_page_config(page_title="نظام إدارة مشاريع الجمعية", layout="wide", page_icon="🏢")
 
-# ====================== قاعدة البيانات ======================
+# ====================== قاعدة البيانات وتأسيس الجداول ======================
 def init_db():
-    conn = sqlite3.connect('association.db')
-    c = conn.cursor()
-    
-    c.execute('''CREATE TABLE IF NOT EXISTS assets 
-                 (id INTEGER PRIMARY KEY, asset_type TEXT, name TEXT, quantity INTEGER, 
-                  location TEXT, status TEXT, date_added TEXT)''')
-    
-    c.execute('''CREATE TABLE IF NOT EXISTS suppliers 
-                 (id INTEGER PRIMARY KEY, name TEXT, category TEXT, phone TEXT, email TEXT, address TEXT)''')
-    
-    c.execute('''CREATE TABLE IF NOT EXISTS employees 
-                 (id INTEGER PRIMARY KEY, name TEXT, national_id TEXT, phone TEXT, job_title TEXT, department TEXT)''')
-    
-    c.execute('''CREATE TABLE IF NOT EXISTS orders 
-                 (id INTEGER PRIMARY KEY, supplier_id INTEGER, item_name TEXT, qty INTEGER, 
-                  status TEXT, date TEXT)''')
-    
-    conn.commit()
-    conn.close()
+    with sqlite3.connect('association.db') as conn:
+        c = conn.cursor()
+        
+        # جدول موظفي المشاريع (تتضمن قسم المشروع)
+        c.execute('''CREATE TABLE IF NOT EXISTS project_employees 
+                     (id INTEGER PRIMARY KEY, project_type TEXT, name TEXT, national_id TEXT, phone TEXT, job_title TEXT)''')
+        
+        # جدول الموردين
+        c.execute('''CREATE TABLE IF NOT EXISTS suppliers 
+                     (id INTEGER PRIMARY KEY, name TEXT, category TEXT, phone TEXT, email TEXT, address TEXT)''')
+        
+        # جدول الفواتير والطلبيات بالأسعار والتفاصيل
+        c.execute('''CREATE TABLE IF NOT EXISTS invoices 
+                     (id INTEGER PRIMARY KEY, supplier_id INTEGER, item_name TEXT, qty INTEGER, total_price REAL, status TEXT, details TEXT, date TEXT)''')
+        
+        # جدول مخزن المؤسسة (القرطاسية وما شابه)
+        c.execute('''CREATE TABLE IF NOT EXISTS inventory 
+                     (id INTEGER PRIMARY KEY, item_name TEXT, category TEXT, quantity INTEGER, status TEXT, last_updated TEXT)''')
+        
+        conn.commit()
 
 init_db()
 
-# ====================== الدوال المساعدة ======================
-def get_suppliers_list():
-    """الحصول على قائمة الموردين"""
-    conn = sqlite3.connect('association.db')
-    df = pd.read_sql_query("SELECT id, name FROM suppliers", conn)
-    conn.close()
-    return df
+# ====================== نظام تسجيل الدخول المحمي ======================
+# الحسابات الافتراضية لمنسقي المشاريع
+USER_CREDENTIALS = {
+    "shelter_coord": "shelter2026",
+    "cva_coord": "cva2026",
+    "meal_coord": "meal2026"
+}
 
-# ====================== الصفحة الرئيسية ======================
-st.title("🏢 نظام إدارة الجمعية المتكامل")
-st.markdown("### نظام شامل لإدارة الأصول والموردين والموظفين والطلبيات")
+if "logged_in" not in st.session_state:
+    st.session_state["logged_in"] = False
+    st.session_state["username"] = ""
 
-tab1, tab2, tab3, tab4 = st.tabs(["إدارة الأصول", "الموردين", "الموظفين", "الطلبيات"])
-
-# ================== تبويب الأصول ==================
-with tab1:
-    st.subheader("📦 إضافة أصل جديد")
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        asset_type = st.selectbox("نوع الأصل", ["لاب توب", "طابعة", "مكتب", "كرسي", "شاشة", "لوحة مفاتيح", "ماوس", "أخرى"])
+def login_page():
+    st.markdown("<h2 style='text-align: center;'>🔒 تسجيل الدخول إلى نظام الجمعية</h2>", unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        asset_name = st.text_input("اسم / موديل الأصل")
-    with col3:
-        quantity = st.number_input("الكمية", min_value=1, value=1, step=1)
-    with col4:
-        location = st.text_input("الموقع / القسم")
-    
-    col_a, col_b, col_c = st.columns(3)
-    with col_a:
-        status = st.selectbox("حالة الأصل", ["ممتازة", "جيدة", "متوسطة", "تحتاج صيانة"])
-    
-    if st.button("➕ إضافة الأصل", type="primary", use_container_width=True):
-        if asset_name and location:
-            conn = sqlite3.connect('association.db')
-            conn.execute("INSERT INTO assets (asset_type, name, quantity, location, status, date_added) VALUES (?,?,?,?,?,?)",
-                        (asset_type, asset_name, quantity, location, status, datetime.now().strftime("%Y-%m-%d")))
-            conn.commit()
-            conn.close()
-            st.success("✅ تم إضافة الأصل بنجاح!")
-        else:
-            st.error("❌ يرجى ملء جميع الحقول المطلوبة")
+        with st.form("login_form"):
+            username = st.text_input("اسم المستخدم (Coordinator Username)")
+            password = st.text_input("كلمة المرور", type="password")
+            submit = st.form_submit_button("دخول", use_container_width=True)
+            
+            if submit:
+                if username in USER_CREDENTIALS and USER_CREDENTIALS[username] == password:
+                    st.session_state["logged_in"] = True
+                    st.session_state["username"] = username
+                    st.rerun()
+                else:
+                    st.error("❌ اسم المستخدم أو كلمة المرور غير صحيحة")
 
+if not st.session_state["logged_in"]:
+    login_page()
+else:
+    # شريط علوي لعرض اسم المستخدم وزر تسجيل الخروج
+    col_user, col_logout = st.columns([8, 2])
+    with col_user:
+        st.markdown(f"👋 مرحباً بك: **{st.session_state['username']}**")
+    with col_logout:
+        if st.button("تسجيل الخروج 🚪", use_container_width=True):
+            st.session_state["logged_in"] = False
+            st.session_state["username"] = ""
+            st.rerun()
+            
+    st.title("🏢 نظام إدارة مشاريع ومخازن الجمعية المتكامل")
     st.divider()
-    st.subheader("📋 جميع الأصول")
-    conn = sqlite3.connect('association.db')
-    df_assets = pd.read_sql_query("SELECT * FROM assets", conn)
-    conn.close()
-    
-    if not df_assets.empty:
-        st.dataframe(df_assets, use_container_width=True, hide_index=True)
-        
-        # إحصائيات
-        st.subheader("📈 الإحصائيات")
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("إجمالي الأصول", len(df_assets))
-        with col2:
-            st.metric("إجمالي الكمية", df_assets['quantity'].sum())
-        with col3:
-            excellent = len(df_assets[df_assets['status'] == 'ممتازة'])
-            st.metric("في حالة ممتازة", excellent)
-        with col4:
-            needs_maintenance = len(df_assets[df_assets['status'] == 'تحتاج صيانة'])
-            st.metric("تحتاج صيانة", needs_maintenance)
-    else:
-        st.info("لا توجد أصول مسجلة حتى الآن")
 
-# ================== تبويب الموردين ==================
-with tab2:
-    st.subheader("🏪 إضافة مورد جديد")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        supplier_name = st.text_input("اسم المورد")
-    with col2:
-        supplier_category = st.selectbox("فئة المورد", ["أجهزة", "مستلزمات مكتبية", "خدمات", "أخرى"])
-    with col3:
-        supplier_phone = st.text_input("رقم الهاتف")
-    
-    col_s1, col_s2, col_s3 = st.columns(3)
-    with col_s1:
-        supplier_email = st.text_input("البريد الإلكتروني")
-    with col_s2:
-        supplier_address = st.text_input("العنوان")
-    
-    if st.button("➕ إضافة المورد", type="primary", use_container_width=True):
-        if supplier_name and supplier_phone:
-            conn = sqlite3.connect('association.db')
-            conn.execute("INSERT INTO suppliers (name, category, phone, email, address) VALUES (?,?,?,?,?)",
-                        (supplier_name, supplier_category, supplier_phone, supplier_email, supplier_address))
-            conn.commit()
-            conn.close()
-            st.success("✅ تم إضافة المورد بنجاح!")
-        else:
-            st.error("❌ يرجى ملء الحقول المطلوبة (الاسم والهاتف)")
+    # إنشاء التبويبات الرئيسية للنظام حسب المتطلبات الجديدة
+    tab_projects, tab_suppliers, tab_inventory = st.tabs([
+        "📁 أقسام المشاريع والموظفين", 
+        "🏪 الموردين والفواتير بالأسعار", 
+        "📦 مخزن المؤسسة والقرطاسية"
+    ])
 
-    st.divider()
-    st.subheader("📋 جميع الموردين")
-    conn = sqlite3.connect('association.db')
-    df_suppliers = pd.read_sql_query("SELECT * FROM suppliers", conn)
-    conn.close()
-    
-    if not df_suppliers.empty:
-        st.dataframe(df_suppliers, use_container_width=True, hide_index=True)
+    # ================== 1. تبويب أقسام المشاريع والموظفين ==================
+    with tab_projects:
+        st.subheader("🛠️ إدارة أقسام وموظفي المشاريع")
         
-        st.subheader("📊 إحصائيات الموردين")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("إجمالي عدد الموردين", len(df_suppliers))
-        with col2:
-            categories = df_suppliers['category'].nunique()
-            st.metric("عدد الفئات", categories)
-    else:
-        st.info("لا يوجد موردين مسجلين حتى الآن")
+        # تقسيم داخلي للمشاريع الـ 3 مع الأيقونات الخاصة بها
+        proj_tab1, proj_tab2, proj_tab3 = st.tabs(["🏠 Shelter", "💳 CVA", "📊 MEAL"])
+        
+        # مصفوفة لتسهيل معالجة تكرار الأقسام والتحكم بها بصرياً
+        project_details = [
+            {"tab": proj_tab1, "name": "Shelter", "icon": "🏠"},
+            {"tab": proj_tab2, "name": "CVA", "icon": "💳"},
+            {"tab": proj_tab3, "name": "MEAL", "icon": "📊"}
+        ]
+        
+        for project in project_details:
+            with project["tab"]:
+                st.markdown(f"### {project['icon']} قسم مشروع {project['name']}")
+                
+                # نموذج إضافة موظف مخصص لهذا المشروع
+                with st.expander(f"➕ تسجيل موظف جديد في مشروع {project['name']}", expanded=False):
+                    with st.form(f"form_emp_{project['name']}"):
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            emp_name = st.text_input("اسم الموظف كاملاً")
+                            emp_national_id = st.text_input("رقم الهوية الوطنية / الإقامة")
+                        with col2:
+                            emp_phone = st.text_input("رقم الهاتف والاتصال")
+                            emp_job_title = st.text_input("المسمى الوظيفي في المشروع")
+                        
+                        btn_add_emp = st.form_submit_button("حفظ الموظف في النظام")
+                        if btn_add_emp:
+                            if emp_name and emp_national_id and emp_phone:
+                                with sqlite3.connect('association.db') as conn:
+                                    conn.execute("""INSERT INTO project_employees (project_type, name, national_id, phone, job_title) 
+                                                    VALUES (?, ?, ?, ?, ?)""", 
+                                                 (project['name'], emp_name, emp_national_id, emp_phone, emp_job_title))
+                                    conn.commit()
+                                st.success(f"✅ تم تسجيل الموظف بنجاح في مشروع {project['name']}!")
+                            else:
+                                st.error("❌ يرجى ملء البيانات الأساسية للموظف (الاسم، الهوية، الهاتف)")
+                
+                # عرض الموظفين التابعين للمشروع المحدد حالياً
+                st.markdown("#### 👥 الموظفون الحاليون في هذا المشروع")
+                with sqlite3.connect('association.db') as conn:
+                    df_emp = pd.read_sql_query("SELECT id, name, national_id, phone, job_title FROM project_employees WHERE project_type = ?", conn, params=(project['name'],))
+                
+                if not df_emp.empty:
+                    st.dataframe(df_emp, use_container_width=True, hide_index=True)
+                    st.metric(f"إجمالي موظفي {project['name']}", len(df_emp))
+                else:
+                    st.info(f"لا يوجد موظفون مسجلون في مشروع {project['name']} حتى الآن.")
 
-# ================== تبويب الموظفين ==================
-with tab3:
-    st.subheader("👤 إضافة موظف جديد")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        emp_name = st.text_input("اسم الموظف")
-    with col2:
-        emp_national_id = st.text_input("رقم الهوية الوطنية")
-    with col3:
-        emp_phone = st.text_input("رقم الهاتف")
-    
-    col_e1, col_e2 = st.columns(2)
-    with col_e1:
-        emp_job_title = st.text_input("المسمى الوظيفي")
-    with col_e2:
-        emp_department = st.selectbox("القسم", ["الإدارة", "التقنية", "العمليات", "الموارد البشرية", "المالية", "أخرى"])
-    
-    if st.button("➕ إضافة الموظف", type="primary", use_container_width=True):
-        if emp_name and emp_national_id and emp_phone:
-            conn = sqlite3.connect('association.db')
-            conn.execute("INSERT INTO employees (name, national_id, phone, job_title, department) VALUES (?,?,?,?,?)",
-                        (emp_name, emp_national_id, emp_phone, emp_job_title, emp_department))
-            conn.commit()
-            conn.close()
-            st.success("✅ تم إضافة الموظف بنجاح!")
-        else:
-            st.error("❌ يرجى ملء جميع الحقول المطلوبة")
-
-    st.divider()
-    st.subheader("👥 جميع الموظفين")
-    conn = sqlite3.connect('association.db')
-    df_employees = pd.read_sql_query("SELECT * FROM employees", conn)
-    conn.close()
-    
-    if not df_employees.empty:
-        st.dataframe(df_employees, use_container_width=True, hide_index=True)
+    # ================== 2. تبويب قائمة الموردين وإضافة الفواتير ==================
+    with tab_suppliers:
+        st.subheader("🏪 إدارة قائمة الموردين وفواتير الطلبيات")
         
-        st.subheader("📊 إحصائيات الموظفين")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("إجمالي عدد الموظفين", len(df_employees))
-        with col2:
-            departments = df_employees['department'].nunique()
-            st.metric("عدد الأقسام", departments)
-        with col3:
-            st.metric("الموظفون", len(df_employees))
-    else:
-        st.info("لا يوجد موظفين مسجلين حتى الآن")
-
-# ================== تبويب الطلبيات ==================
-with tab4:
-    st.subheader("📦 إضافة طلبية جديدة")
-    col1, col2, col3 = st.columns(3)
-    
-    # الحصول على قائمة الموردين
-    conn = sqlite3.connect('association.db')
-    suppliers_df = pd.read_sql_query("SELECT id, name FROM suppliers", conn)
-    conn.close()
-    
-    if suppliers_df.empty:
-        st.warning("⚠️ يرجى إضافة موردين أولاً قبل إنشاء طلبيات")
-    else:
-        supplier_names = suppliers_df['name'].tolist()
-        supplier_dict = dict(zip(suppliers_df['name'], suppliers_df['id']))
+        sub_tab_supp, sub_tab_inv = st.tabs(["📋 قائمة الموردين", "🧾 فواتير وطلبيات الأسعار"])
         
-        with col1:
-            selected_supplier = st.selectbox("اختر المورد", supplier_names, key="supplier_order")
-        with col2:
-            item_name = st.text_input("اسم الصنف")
-        with col3:
-            qty = st.number_input("الكمية", min_value=1, value=1, step=1)
-        
-        col_o1, col_o2 = st.columns(2)
-        with col_o1:
-            order_status = st.selectbox("حالة الطلبية", ["قيد الانتظار", "تم التأكيد", "تم الشحن", "تم الاستلام", "ملغاة"])
-        
-        if st.button("➕ إضافة الطلبية", type="primary", use_container_width=True):
-            if item_name:
-                supplier_id = supplier_dict[selected_supplier]
-                conn = sqlite3.connect('association.db')
-                conn.execute("INSERT INTO orders (supplier_id, item_name, qty, status, date) VALUES (?,?,?,?,?)",
-                            (supplier_id, item_name, qty, order_status, datetime.now().strftime("%Y-%m-%d")))
-                conn.commit()
-                conn.close()
-                st.success("✅ تم إضافة الطلبية بنجاح!")
+        # --- فرع إدارة الموردين ---
+        with sub_tab_supp:
+            st.markdown("### ➕ إضافة مورد جديد للقائمة")
+            with st.form("supplier_form"):
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    s_name = st.text_input("اسم الشركة / المورد")
+                    s_category = st.selectbox("تصنيف التوريد", ["أجهزة إلكترونية", "قرطاسية ومستلزمات مكتبية", "مواد بناء وصيانة", "خدمات عامة", "أخرى"])
+                with col2:
+                    s_phone = st.text_input("رقم التواصل")
+                    s_email = st.text_input("البريد الإلكتروني")
+                with col3:
+                    s_address = st.text_input("العنوان الوطني / المقر الرئيسي")
+                
+                btn_supplier = st.form_submit_button("إضافة المورد إلى القائمة الرسمية")
+                if btn_supplier:
+                    if s_name and s_phone:
+                        with sqlite3.connect('association.db') as conn:
+                            conn.execute("INSERT INTO suppliers (name, category, phone, email, address) VALUES (?, ?, ?, ?, ?)",
+                                         (s_name, s_category, s_phone, s_email, s_address))
+                            conn.commit()
+                        st.success("✅ تم إدراج المورد بنجاح!")
+                        st.rerun()
+                    else:
+                        st.error("❌ يرجى تعبئة الحقول الإلزامية للمورد (الاسم والهاتف).")
+            
+            st.divider()
+            st.markdown("### 📋 قائمة الموردين المعتمدين")
+            with sqlite3.connect('association.db') as conn:
+                df_suppliers = pd.read_sql_query("SELECT * FROM suppliers", conn)
+            if not df_suppliers.empty:
+                st.dataframe(df_suppliers, use_container_width=True, hide_index=True)
             else:
-                st.error("❌ يرجى ملء جميع الحقول")
+                st.info("لم يتم تسجيل أي موردين في القائمة المعتمدة بعد.")
 
-    st.divider()
-    st.subheader("📋 جميع الطلبيات")
-    conn = sqlite3.connect('association.db')
-    df_orders = pd.read_sql_query("""
-        SELECT o.id, s.name as supplier_name, o.item_name, o.qty, o.status, o.date 
-        FROM orders o 
-        LEFT JOIN suppliers s ON o.supplier_id = s.id
-    """, conn)
-    conn.close()
-    
-    if not df_orders.empty:
-        # فلتر حسب الحالة
-        status_filter = st.selectbox("فلتر حسب الحالة", ["الكل"] + df_orders['status'].unique().tolist())
+        # --- فرع الفواتير وطلبيات الأسعار ---
+        with sub_tab_inv:
+            st.markdown("### 🧾 إصدار وتسجيل فاتورة طلبية جديدة")
+            
+            with sqlite3.connect('association.db') as conn:
+                suppliers_select_df = pd.read_sql_query("SELECT id, name FROM suppliers", conn)
+                
+            if suppliers_select_df.empty:
+                st.warning("⚠️ لا يمكن إضافة فواتير بدون وجود موردين. يرجى إضافة مورد أولاً من تبويب (قائمة الموردين).")
+            else:
+                supplier_mapping = dict(zip(suppliers_select_df['name'], suppliers_select_df['id']))
+                
+                with st.form("invoice_form"):
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        chosen_supplier = st.selectbox("اختر المورد المتعاقد معه", suppliers_select_df['name'].tolist())
+                        inv_item_name = st.text_input("اسم الصنف أو الخدمة المطلوبة")
+                    with col2:
+                        inv_qty = st.number_input("الكمية المشتراة", min_value=1, value=1, step=1)
+                        inv_price = st.number_input("السعر الإجمالي النهائي للفاتورة (بالعملة المحلية)", min_value=0.0, step=0.50)
+                    with col3:
+                        inv_status = st.selectbox("حالة دفع الفاتورة", ["قيد المعالجة/الطلب", "مدفوعة بالكامل", "مدفوعة جزئياً", "آجل / لم تدفع"])
+                        inv_details = st.text_area("تفاصيل السلع المذكورة في الفاتورة أو شروط التوريد")
+                        
+                    btn_invoice = st.form_submit_button("تسجيل الفاتورة وحفظ القيمة المالية")
+                    if btn_invoice:
+                        if inv_item_name and inv_price > 0:
+                            s_id = supplier_mapping[chosen_supplier]
+                            current_date = datetime.now().strftime("%Y-%m-%d %H:%M")
+                            with sqlite3.connect('association.db') as conn:
+                                conn.execute("""INSERT INTO invoices (supplier_id, item_name, qty, total_price, status, details, date) 
+                                                VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                                             (s_id, inv_item_name, inv_qty, inv_price, inv_status, inv_details, current_date))
+                                conn.commit()
+                            st.success("✅ تم قيد وفهرسة الفاتورة والطلبية بنجاح!")
+                            st.rerun()
+                        else:
+                            st.error("❌ يرجى إدخال اسم الصنف وتحديد السعر الإجمالي للفاتورة بشكل صحيح.")
+                            
+            st.divider()
+            st.markdown("### 📊 السجل الشامل للفواتير والطلبيات")
+            with sqlite3.connect('association.db') as conn:
+                df_invoices = pd.read_sql_query("""
+                    SELECT i.id, s.name as supplier_name, i.item_name, i.qty, i.total_price, i.status, i.details, i.date 
+                    FROM invoices i
+                    LEFT JOIN suppliers s ON i.supplier_id = s.id
+                """, conn)
+                
+            if not df_invoices.empty:
+                st.dataframe(df_invoices, use_container_width=True, hide_index=True)
+                
+                # عرض مؤشرات إحصائية مالية للفواتير والطلبيات
+                st.markdown("#### 📐 ملخص مالي سريع")
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    st.metric("إجمالي الفواتير الصادرة", len(df_invoices))
+                with c2:
+                    st.metric("المبالغ الإجمالية المستحقة/المدفوعة", f"{df_invoices['total_price'].sum():,.2f}")
+                with c3:
+                    paid_count = len(df_invoices[df_invoices['status'] == 'مدفوعة بالكامل'])
+                    st.metric("عدد الفواتير المسددة بالكامل", paid_count)
+            else:
+                st.info("لا توجد فواتير أو طلبيات مسجلة مالياً في النظام حتى الآن.")
+
+    # ================== 3. تبويب مخزن المؤسسة (القرطاسية وما شابه) ==================
+    with tab_inventory:
+        st.subheader("📦 إدارة عهد ومخزن المؤسسة الرئيسي")
+        st.markdown("### قسم مخصص لتسجيل وإحصاء مستلزمات المكتب من قرطاسية، أحبار، أدوات ضيافة، وغيرها.")
         
-        if status_filter != "الكل":
-            df_orders_filtered = df_orders[df_orders['status'] == status_filter]
+        # نموذج إدخال بضائع للمخزن
+        with st.form("inventory_form"):
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                inv_name = st.text_input("اسم المادة المخزنية (مثال: ورق A4، أقلام، ملفات)")
+            with col2:
+                inv_cat = st.selectbox("تصنيف المادة المخزنية", ["قرطاسية وأدوات مكتبية", "مستلزمات أحبار وطابعات", "أدوات ومواد تنظيف", "ضيافة ومأكولات للمكتب", "أخرى"])
+            with col3:
+                inv_quantity = st.number_input("الكمية المتوفرة حالياً في الرف", min_value=0, value=0, step=1)
+                
+            inv_item_status = st.selectbox("حالة وفرة المخزون", ["متوفر وبحالة جيدة", "يوشك على النفاذ (طلب عاجل)", "مستنفذ تماماً"])
+            
+            btn_inventory = st.form_submit_button("تحديث / إضافة عهدة للمخزن")
+            if btn_inventory:
+                if inv_name:
+                    update_time = datetime.now().strftime("%Y-%m-%d %H:%M")
+                    with sqlite3.connect('association.db') as conn:
+                        conn.execute("INSERT INTO inventory (item_name, category, quantity, status, last_updated) VALUES (?, ?, ?, ?, ?)",
+                                     (inv_name, inv_cat, inv_quantity, inv_item_status, update_time))
+                        conn.commit()
+                    st.success("✅ تم تحديث كشوفات مخزن المؤسسة بنجاح!")
+                    st.rerun()
+                else:
+                    st.error("❌ يرجى كتابة اسم المادة المراد جدولتها في المخزن.")
+                    
+        st.divider()
+        st.markdown("### 📋 جدول جرد محتويات مخزن القرطاسية الحالية")
+        with sqlite3.connect('association.db') as conn:
+            df_inventory = pd.read_sql_query("SELECT * FROM inventory", conn)
+            
+        if not df_inventory.empty:
+            st.dataframe(df_inventory, use_container_width=True, hide_index=True)
+            
+            # ملخص المخزن والقرطاسية
+            st.markdown("#### 📊 إحصائيات الجرد المكتبي")
+            i_col1, i_col2, i_col3 = st.columns(3)
+            with i_col1:
+                st.metric("عدد الأصناف المختلفة المسجلة", len(df_inventory))
+            with i_col2:
+                st.metric("إجمالي حجم القطع/الكميات بالمخزن", int(df_inventory['quantity'].sum()))
+            with i_col3:
+                low_stock = len(df_inventory[df_inventory['status'] == 'يوشك على النفاذ (طلب عاجل)'])
+                st.metric("أصناف تحت خطر النفاذ", low_stock)
         else:
-            df_orders_filtered = df_orders
-        
-        st.dataframe(df_orders_filtered, use_container_width=True, hide_index=True)
-        
-        st.subheader("📊 إحصائيات الطلبيات")
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("إجمالي الطلبيات", len(df_orders))
-        with col2:
-            pending = len(df_orders[df_orders['status'] == 'قيد الانتظار'])
-            st.metric("قيد الانتظار", pending)
-        with col3:
-            confirmed = len(df_orders[df_orders['status'] == 'تم التأكيد'])
-            st.metric("تم التأكيد", confirmed)
-        with col4:
-            received = len(df_orders[df_orders['status'] == 'تم الاستلام'])
-            st.metric("تم الاستلام", received)
-    else:
-        st.info("لا توجد طلبيات مسجلة حتى الآن")
+            st.info("لا توجد أصناف أو عهد مكتبية مسجلة في المخزن حتى الآن.")
 
-# ================== تذييل الصفحة ==================
+# ================== تذييل الصفحة الثابت ==================
 st.divider()
 st.markdown("""
-<div style="text-align: center; padding: 20px;">
-    <p>💼 نظام إدارة الجمعية المتكامل | جميع الحقوق محفوظة</p>
-    <p>تم التطوير بواسطة Streamlit</p>
+<div style="text-align: center; padding: 15px; color: gray;">
+    <p>💼 نظام إدارة الجمعية المتكامل والمشاريع المخصصة (Shelter / CVA / MEAL) | جميع الحقوق محفوظة © 2026</p>
+    <p>بنيت بكل كفاءة باستخدام بايثون و Streamlit</p>
 </div>
 """, unsafe_allow_html=True)

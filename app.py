@@ -26,8 +26,21 @@
             --danger-light: #fee2e2;
             --success-light: #ecfdf5;
             --info-light: #e0f2fe;
+      import streamlit as st
+
+# تأكد أن كود الـ HTML والـ CSS مكتوب بهذه الطريقة تماماً داخل دالة st.markdown
+st.markdown(
+    """
+    <style>
+        :root {
+            --primary: #2563eb;
             --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.02);
+            /* باقي متغيرات التصميم الخاصة بك */
         }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
         * {
             box-sizing: border-box;

@@ -279,3 +279,98 @@ with tab4:
             st.plotly_chart(fig_pie, use_container_width=True)
         else:
             st.info("قم بإضافة عهد للموظفين لرؤية توزيع نسب استهلاك البرامج للموارد.")
+import streamlit as st
+import pandas as pd
+import sqlite3
+import plotly.express as px
+from datetime import datetime
+from io import BytesIO
+
+st.set_page_config(
+    page_title="النظام اللوجستي - نسخة الحماية",
+    page_icon="📦",
+    layout="wide"
+)
+
+# دالة آمنة للاتصال بقاعدة البيانات لمنع انهيار السيرفر
+def run_db_query(query, params=(), is_select=False):
+    try:
+        conn = sqlite3.connect('logistics_safe.db')
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute(query, params)
+        if is_select:
+            data = cursor.fetchall()
+            conn.close()
+            return data
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        # عرض الخطأ للمستخدم مباشرة على الواجهة بدلاً من إغلاق السيرفر
+        st.error(f"⚠️ حدث خطأ في قاعدة البيانات: {e}")
+        return [] if is_select else False
+
+# إنشاء الجداول بشكل آمن
+try:
+    run_db_query('''
+        CREATE TABLE IF NOT EXISTS inventory (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_name TEXT UNIQUE,
+            available INTEGER,
+            issued INTEGER,
+            min_limit INTEGER
+        )
+    ''')
+    run_db_query('''
+        CREATE TABLE IF NOT EXISTS employees (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date_assigned TEXT,
+            emp_name TEXT,
+            job_title TEXT,
+            program TEXT,
+            custody_items TEXT,
+            notes TEXT
+        )
+    ''')
+    run_db_query('''
+        CREATE TABLE IF NOT EXISTS tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_date TEXT,
+            task_desc TEXT,
+            receiver TEXT,
+            status TEXT
+        )
+    ''')
+    
+    # إضافة بيانات أولية إذا كان الجدول فارغاً
+    check_empty = run_db_query("SELECT COUNT(*) as count FROM inventory", is_select=True)
+    if check_empty and check_empty[0]['count'] == 0:
+        run_db_query("INSERT INTO inventory (item_name, available, issued, min_limit) VALUES ('لاب توب', 10, 2, 3)")
+        run_db_query("INSERT INTO inventory (item_name, available, issued, min_limit) VALUES ('قرطاسية', 50, 10, 5)")
+except Exception as e:
+    st.error(f"خطأ أثناء تهيئة النظام: {e}")
+
+# واجهة التطبيق الرئيسية
+st.title("🏢 لوحة التحكم اللوجستية الآمنة")
+st.write("إذا ظهر أي خطأ برامجي، سيتم عرضه هنا بالأسفل دون توقف التطبيق.")
+
+tab1, tab2 = st.tabs(["📦 المخزن والحركة", "📊 البيانات الإحصائية"])
+
+with tab1:
+    st.subheader("جرد المستودع الحالي")
+    db_data = run_db_query("SELECT * FROM inventory", is_select=True)
+    if db_data:
+        df = pd.DataFrame([dict(row) for row in db_data])
+        st.dataframe(df, use_container_width=True)
+    else:
+        st.info("لا توجد بيانات متوفرة حالياً في قاعدة البيانات.")
+
+with tab2:
+    st.subheader("الرسوم البيانية (Plotly)")
+    if db_data:
+        df_graph = pd.DataFrame([dict(row) for row in db_data])
+        fig = px.bar(df_graph, x="item_name", y="available", title="الكميات المتوفرة لكل صنف")
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.warning("لا توجد بيانات لرسمها بياناً.")

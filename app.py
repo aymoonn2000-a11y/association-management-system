@@ -6,7 +6,6 @@
     <meta name="description" content="نظام إدارة ذكي للجمعيات - إدارة المخزون والموظفين والعهد">
     <title>نظام إدارة الجمعية الذكي</title>
     
-    <!-- خطوط Google - Cairo للعربية -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700&display=swap" rel="stylesheet">
@@ -493,13 +492,11 @@
 <body>
 
 <div class="container">
-    <!-- Header -->
     <header role="banner">
         <h1>نظام الإدارة الداخلي للجمعية</h1>
         <p>إدارة المخزون المستودعي، بيانات الموظفين، والعهد الميدانية الذكية</p>
     </header>
 
-    <!-- Navigation Tabs -->
     <nav class="tabs" role="tablist" aria-label="قائمة التنقل الرئيسية">
         <button class="tab-btn active" role="tab" aria-selected="true" aria-controls="inventory" onclick="switchTab(event, 'inventory')">
             📦 إدارة المخزون
@@ -509,13 +506,10 @@
         </button>
     </nav>
 
-    <!-- Alert Messages Container -->
     <div id="alertContainer" role="status" aria-live="polite" aria-atomic="true"></div>
 
-    <!-- Inventory Section -->
     <section id="inventory" class="tab-content active" role="tabpanel">
         <div class="grid">
-            <!-- Inventory Form -->
             <div class="card">
                 <h2>تحديث حركة مخزن</h2>
                 <form id="inventoryForm" novalidate>
@@ -567,7 +561,6 @@
                 </form>
             </div>
 
-            <!-- Inventory Table -->
             <div class="card">
                 <h2>حالة المخزن الحالية</h2>
                 <div class="table-container">
@@ -581,18 +574,15 @@
                             </tr>
                         </thead>
                         <tbody id="inventoryTableBody">
-                            <!-- يتم التعبئة تلقائياً عبر JavaScript -->
-                        </tbody>
+                            </tbody>
                     </table>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- Staff Section -->
     <section id="staff" class="tab-content" role="tabpanel">
         <div class="grid">
-            <!-- Staff Form -->
             <div class="card">
                 <h2>إضافة موظف وعهدة جديدة</h2>
                 <form id="staffForm" novalidate>
@@ -696,7 +686,6 @@
                 </form>
             </div>
 
-            <!-- Staff Table -->
             <div class="card">
                 <h2>سجل الموظفين والعهد</h2>
                 <div class="table-container">
@@ -712,8 +701,7 @@
                             </tr>
                         </thead>
                         <tbody id="staffTableBody">
-                            <!-- يتم التعبئة تلقائياً عبر JavaScript -->
-                        </tbody>
+                            </tbody>
                     </table>
                 </div>
             </div>
@@ -726,11 +714,6 @@
     // 1. UTILITY FUNCTIONS
     // ============================================
 
-    /**
-     * تبديل التبويب (Tab) مع معالجة ARIA
-     * @param {Event} event - حدث النقر
-     * @param {string} tabId - معرّف التبويب
-     */
     function switchTab(event, tabId) {
         const tabBtns = document.querySelectorAll('.tab-btn');
         const tabContents = document.querySelectorAll('.tab-content');
@@ -749,12 +732,6 @@
         document.getElementById(tabId).classList.add('active');
     }
 
-    /**
-     * عرض رسالة إنذار (Alert)
-     * @param {string} message - محتوى الرسالة
-     * @param {string} type - نوع الإنذار (success, error, info)
-     * @param {number} duration - مدة عرض الرسالة بالمللي ثانية
-     */
     function showAlert(message, type = 'info', duration = 4000) {
         const container = document.getElementById('alertContainer');
         const alert = document.createElement('div');
@@ -777,32 +754,8 @@
         }, duration);
     }
 
-    /**
-     * التحقق من صحة البريد الإلكتروني
-     * @param {string} email - البريد الإلكتروني
-     * @returns {boolean}
-     */
-    function isValidEmail(email) {
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        return emailRegex.test(email);
-    }
-
-    /**
-     * التحقق من صحة التاريخ
-     * @param {string} dateString - التاريخ كنص
-     * @returns {boolean}
-     */
-    function isValidDate(dateString) {
-        const date = new Date(dateString);
-        return date instanceof Date && !isNaN(date);
-    }
-
-    /**
-     * صيغة التاريخ بالعربية
-     * @param {string} dateString - التاريخ
-     * @returns {string}
-     */
     function formatDate(dateString) {
+        if (!dateString) return '-';
         const date = new Date(dateString);
         return date.toLocaleDateString('ar-EG', {
             year: 'numeric',
@@ -815,7 +768,8 @@
     // 2. INVENTORY MANAGEMENT
     // ============================================
 
-    const initialInventory = {
+    // جلب البيانات المخزنة مسبقاً أو تحميل الافتراضية
+    const initialInventory = JSON.parse(localStorage.getItem('ngo_inventory')) || {
         "شاي": { available: 50, issued: 12 },
         "قهوة": { available: 40, issued: 15 },
         "منظفات": { available: 100, issued: 35 },
@@ -824,9 +778,6 @@
         "قرطاسية (فايلات نايلون)": { available: 300, issued: 45 }
     };
 
-    /**
-     * تحديث وعرض جدول المخزون
-     */
     function renderInventory() {
         const tbody = document.getElementById('inventoryTableBody');
         tbody.innerHTML = '';
@@ -847,31 +798,25 @@
                 <td>
                     <strong style="color: ${remaining < 10 ? 'var(--danger)' : 'var(--text-main)'}">
                         ${remaining}
-                    </strong>
+                    </strong> 
                     ${statusBadge}
                 </td>
             `;
             tbody.appendChild(row);
         });
+        
+        // حفظ التغييرات في ذاكرة المتصفح
+        localStorage.setItem('ngo_inventory', JSON.stringify(initialInventory));
     }
 
-    /**
-     * التحقق من صحة استمارة المخزون
-     * @returns {boolean}
-     */
     function validateInventoryForm() {
         const category = document.getElementById('itemCategory');
         const available = document.getElementById('itemAvailable');
         const issued = document.getElementById('itemIssued');
         let isValid = true;
 
-        // تنظيف الأخطاء السابقة
-        document.querySelectorAll('#inventoryForm .error-message').forEach(el => {
-            el.classList.remove('show');
-        });
-        document.querySelectorAll('#inventoryForm .form-control').forEach(el => {
-            el.classList.remove('error');
-        });
+        document.querySelectorAll('#inventoryForm .error-message').forEach(el => el.classList.remove('show'));
+        document.querySelectorAll('#inventoryForm .form-control').forEach(el => el.classList.remove('error'));
 
         if (!category.value.trim()) {
             document.getElementById('itemCategoryError').classList.add('show');
@@ -879,13 +824,13 @@
             isValid = false;
         }
 
-        if (!available.value || available.value < 0 || !Number.isInteger(Number(available.value))) {
+        if (available.value === '' || available.value < 0) {
             document.getElementById('itemAvailableError').classList.add('show');
             available.classList.add('error');
             isValid = false;
         }
 
-        if (!issued.value || issued.value < 0 || !Number.isInteger(Number(issued.value))) {
+        if (issued.value === '' || issued.value < 0) {
             document.getElementById('itemIssuedError').classList.add('show');
             issued.classList.add('error');
             isValid = false;
@@ -894,7 +839,6 @@
         return isValid;
     }
 
-    // معالج تقديم استمارة المخزون
     document.getElementById('inventoryForm').addEventListener('submit', function(e) {
         e.preventDefault();
 
@@ -904,8 +848,8 @@
         }
 
         const category = document.getElementById('itemCategory').value;
-        const av = parseInt(document.getElementById('itemAvailable').value);
-        const is = parseInt(document.getElementById('itemIssued').value);
+        const av = parseInt(document.getElementById('itemAvailable').value) || 0;
+        const is = parseInt(document.getElementById('itemIssued').value) || 0;
 
         initialInventory[category].available += av;
         initialInventory[category].issued += is;
@@ -919,10 +863,11 @@
     // 3. STAFF MANAGEMENT
     // ============================================
 
-    const staffList = [
+    // جلب بيانات الموظفين المخزنة أو تحميل الموظف الافتراضي
+    let staffList = JSON.parse(localStorage.getItem('ngo_staff')) || [
         {
-            id: Date.now(),
-            name: "أحمد حسان",
+            id: 1710000000000,
+            name: "حسن فضل أحمد طافش",
             idCard: "Emp-4022",
             title: "مهندس إيواء",
             program: "Shelter Field Engineer",
@@ -932,9 +877,6 @@
         }
     ];
 
-    /**
-     * تحديث وعرض جدول الموظفين
-     */
     function renderStaff() {
         const tbody = document.getElementById('staffTableBody');
         tbody.innerHTML = '';
@@ -947,11 +889,12 @@
                     </td>
                 </tr>
             `;
+            localStorage.setItem('ngo_staff', JSON.stringify(staffList));
             return;
         }
 
         staffList.forEach(staff => {
-            const custodyItems = staff.custody.length > 0
+            const custodyItems = staff.custody && staff.custody.length > 0
                 ? `<ul class="custody-list">${staff.custody.map(item => `<li>${item}</li>`).join('')}</ul>`
                 : '<small style="color: var(--text-muted);">-</small>';
 
@@ -976,75 +919,53 @@
             `;
             tbody.appendChild(row);
         });
+
+        localStorage.setItem('ngo_staff', JSON.stringify(staffList));
     }
 
     /**
-     * حذف سجل موظف
-     * @param {number} staffId - معرّف الموظف
+     * دالة حذف سجل موظف المكتملة والمصلحة
      */
-    function deleteStaff(staffId) {
-        if (confirm('هل أنت متأكد من حذف هذا السجل؟')) {
-            const index = staffList.findIndex(s => s.id === staffId);
-            if (index > -1) {
-                staffList.splice(index, 1);
-                renderStaff();
-                showAlert('تم حذف السجل بنجاح', 'success');
-            }
+    function deleteStaff(id) {
+        if (confirm('هل أنت متأكد من رغبتك في حذف هذا الموظف وسجل عهدته بالكامل؟')) {
+            staffList = staffList.filter(staff => staff.id !== id);
+            renderStaff();
+            showAlert('تم حذف سجل الموظف بنجاح', 'success');
         }
     }
 
-    /**
-     * التحقق من صحة استمارة الموظفين
-     * @returns {boolean}
-     */
     function validateStaffForm() {
         const name = document.getElementById('staffName');
         const title = document.getElementById('staffTitle');
         const idCard = document.getElementById('staffIdCard');
         const program = document.getElementById('staffProgram');
         const date = document.getElementById('custodyDate');
-
         let isValid = true;
 
-        // تنظيف الأخطاء السابقة
-        document.querySelectorAll('#staffForm .error-message').forEach(el => {
-            el.classList.remove('show');
-        });
-        document.querySelectorAll('#staffForm .form-control').forEach(el => {
-            el.classList.remove('error');
-        });
+        document.querySelectorAll('#staffForm .error-message').forEach(el => el.classList.remove('show'));
+        document.querySelectorAll('#staffForm .form-control').forEach(el => el.classList.remove('error'));
 
-        // التحقق من الاسم
-        if (!name.value.trim() || name.value.length < 3 || name.value.length > 100) {
+        if (!name.value.trim() || name.value.trim().length < 3) {
             document.getElementById('staffNameError').classList.add('show');
             name.classList.add('error');
             isValid = false;
         }
-
-        // التحقق من المسمى الوظيفي
-        if (!title.value.trim() || title.value.length < 2) {
+        if (!title.value.trim()) {
             document.getElementById('staffTitleError').classList.add('show');
             title.classList.add('error');
             isValid = false;
         }
-
-        // التحقق من رقم الهوية
-        const idPattern = /^[A-Za-z0-9\-]{3,20}$/;
-        if (!idCard.value.trim() || !idPattern.test(idCard.value)) {
+        if (!idCard.value.trim()) {
             document.getElementById('staffIdCardError').classList.add('show');
             idCard.classList.add('error');
             isValid = false;
         }
-
-        // التحقق من البرنامج
-        if (!program.value.trim()) {
+        if (!program.value) {
             document.getElementById('staffProgramError').classList.add('show');
             program.classList.add('error');
             isValid = false;
         }
-
-        // التحقق من التاريخ
-        if (!date.value || !isValidDate(date.value)) {
+        if (!date.value) {
             document.getElementById('custodyDateError').classList.add('show');
             date.classList.add('error');
             isValid = false;
@@ -1053,32 +974,27 @@
         return isValid;
     }
 
-    // عداد الأحرف للملاحظات
-    document.getElementById('staffNotes').addEventListener('input', function() {
-        document.getElementById('charCount').textContent = this.value.length;
-    });
-
-    // معالج تقديم استمارة الموظفين
     document.getElementById('staffForm').addEventListener('submit', function(e) {
         e.preventDefault();
 
         if (!validateStaffForm()) {
-            showAlert('يرجى تصحيح الأخطاء أعلاه', 'error');
+            showAlert('يرجى التأكد من ملء الحقول الإلزامية بدقة', 'error');
             return;
         }
 
-        const checkedCustody = [];
-        document.querySelectorAll('.custody-check:checked').forEach(cb => {
-            checkedCustody.push(cb.value);
+        // تجميع العهد المختارة
+        const selectedCustody = [];
+        document.querySelectorAll('.custody-check:checked').forEach(checkbox => {
+            selectedCustody.push(checkbox.value);
         });
 
         const newStaff = {
             id: Date.now(),
             name: document.getElementById('staffName').value.trim(),
-            title: document.getElementById('staffTitle').value.trim(),
             idCard: document.getElementById('staffIdCard').value.trim(),
+            title: document.getElementById('staffTitle').value.trim(),
             program: document.getElementById('staffProgram').value,
-            custody: checkedCustody,
+            custody: selectedCustody,
             date: document.getElementById('custodyDate').value,
             notes: document.getElementById('staffNotes').value.trim()
         };
@@ -1087,23 +1003,19 @@
         renderStaff();
         this.reset();
         document.getElementById('charCount').textContent = '0';
-        document.querySelectorAll('.custody-check').forEach(cb => cb.checked = false);
-        showAlert('تم حفظ بيانات الموظف والعهدة بنجاح ✓', 'success');
+        showAlert('تم حفظ الموظف والعهدة بنجاح في السجل ✓', 'success');
     });
 
-    // ============================================
-    // 4. INITIALIZATION
-    // ============================================
+    // عداد الحروف لعداد الملاحظات
+    document.getElementById('staffNotes').addEventListener('input', function() {
+        document.getElementById('charCount').textContent = this.value.length;
+    });
 
-    // تحميل البيانات الأولية عند فتح الصفحة
-    document.addEventListener('DOMContentLoaded', function() {
+    // تشغيل النظام عند تحميل الصفحة
+    window.addEventListener('DOMContentLoaded', () => {
         renderInventory();
         renderStaff();
-        console.log('✓ تم تحميل نظام الإدارة بنجاح');
     });
 </script>
-
 </body>
 </html>
-
-

@@ -26,21 +26,8 @@
             --danger-light: #fee2e2;
             --success-light: #ecfdf5;
             --info-light: #e0f2fe;
-      import streamlit as st
-
-# تأكد أن كود الـ HTML والـ CSS مكتوب بهذه الطريقة تماماً داخل دالة st.markdown
-st.markdown(
-    """
-    <style>
-        :root {
-            --primary: #2563eb;
             --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.02);
-            /* باقي متغيرات التصميم الخاصة بك */
         }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
 
         * {
             box-sizing: border-box;
@@ -241,6 +228,7 @@ st.markdown(
             background: #f1f5f9;
             padding: 1rem;
             border-radius: 0.5rem;
+            border: none;
         }
 
         .checkbox-group label {
@@ -587,7 +575,7 @@ st.markdown(
                             </tr>
                         </thead>
                         <tbody id="inventoryTableBody">
-                            </tbody>
+                        </tbody>
                     </table>
                 </div>
             </div>
@@ -714,7 +702,7 @@ st.markdown(
                             </tr>
                         </thead>
                         <tbody id="staffTableBody">
-                            </tbody>
+                        </tbody>
                     </table>
                 </div>
             </div>
@@ -777,11 +765,15 @@ st.markdown(
         });
     }
 
+    // عدّاد الحروف للملاحظات
+    document.getElementById('staffNotes').addEventListener('input', function() {
+        document.getElementById('charCount').textContent = this.value.length;
+    });
+
     // ============================================
     // 2. INVENTORY MANAGEMENT
     // ============================================
 
-    // جلب البيانات المخزنة مسبقاً أو تحميل الافتراضية
     const initialInventory = JSON.parse(localStorage.getItem('ngo_inventory')) || {
         "شاي": { available: 50, issued: 12 },
         "قهوة": { available: 40, issued: 15 },
@@ -818,7 +810,6 @@ st.markdown(
             tbody.appendChild(row);
         });
         
-        // حفظ التغييرات في ذاكرة المتصفح
         localStorage.setItem('ngo_inventory', JSON.stringify(initialInventory));
     }
 
@@ -837,13 +828,13 @@ st.markdown(
             isValid = false;
         }
 
-        if (available.value === '' || available.value < 0) {
+        if (available.value === '' || parseInt(available.value) < 0) {
             document.getElementById('itemAvailableError').classList.add('show');
             available.classList.add('error');
             isValid = false;
         }
 
-        if (issued.value === '' || issued.value < 0) {
+        if (issued.value === '' || parseInt(issued.value) < 0) {
             document.getElementById('itemIssuedError').classList.add('show');
             issued.classList.add('error');
             isValid = false;
@@ -876,7 +867,6 @@ st.markdown(
     // 3. STAFF MANAGEMENT
     // ============================================
 
-    // جلب بيانات الموظفين المخزنة أو تحميل الموظف الافتراضي
     let staffList = JSON.parse(localStorage.getItem('ngo_staff')) || [
         {
             id: 1710000000000,
@@ -936,9 +926,6 @@ st.markdown(
         localStorage.setItem('ngo_staff', JSON.stringify(staffList));
     }
 
-    /**
-     * دالة حذف سجل موظف المكتملة والمصلحة
-     */
     function deleteStaff(id) {
         if (confirm('هل أنت متأكد من رغبتك في حذف هذا الموظف وسجل عهدته بالكامل؟')) {
             staffList = staffList.filter(staff => staff.id !== id);
@@ -963,21 +950,26 @@ st.markdown(
             name.classList.add('error');
             isValid = false;
         }
-        if (!title.value.trim()) {
+
+        if (!title.value.trim() || title.value.trim().length < 2) {
             document.getElementById('staffTitleError').classList.add('show');
             title.classList.add('error');
             isValid = false;
         }
-        if (!idCard.value.trim()) {
+
+        const idPattern = /^[A-Za-z0-9\-]{3,20}$/;
+        if (!idCard.value.trim() || !idPattern.test(idCard.value.trim())) {
             document.getElementById('staffIdCardError').classList.add('show');
             idCard.classList.add('error');
             isValid = false;
         }
+
         if (!program.value) {
             document.getElementById('staffProgramError').classList.add('show');
             program.classList.add('error');
             isValid = false;
         }
+
         if (!date.value) {
             document.getElementById('custodyDateError').classList.add('show');
             date.classList.add('error');
@@ -991,18 +983,18 @@ st.markdown(
         e.preventDefault();
 
         if (!validateStaffForm()) {
-            showAlert('يرجى التأكد من ملء الحقول الإلزامية بدقة', 'error');
+            showAlert('يرجى تصحيح الأخطاء في نموذج الموظف', 'error');
             return;
         }
 
-        // تجميع العهد المختارة
+        // تجميع العهد المحددة
         const selectedCustody = [];
         document.querySelectorAll('.custody-check:checked').forEach(checkbox => {
             selectedCustody.push(checkbox.value);
         });
 
         const newStaff = {
-            id: Date.now(),
+            id: Date.now(), // معرّف فريد يعتمد على الوقت
             name: document.getElementById('staffName').value.trim(),
             idCard: document.getElementById('staffIdCard').value.trim(),
             title: document.getElementById('staffTitle').value.trim(),
@@ -1015,20 +1007,18 @@ st.markdown(
         staffList.push(newStaff);
         renderStaff();
         this.reset();
-        document.getElementById('charCount').textContent = '0';
-        showAlert('تم حفظ الموظف والعهدة بنجاح في السجل ✓', 'success');
+        document.getElementById('charCount').textContent = '0'; // إعادة تصغير العداد
+        showAlert('تم حفظ بيانات الموظف والعهدة بنجاح ✓', 'success');
     });
 
-    // عداد الحروف لعداد الملاحظات
-    document.getElementById('staffNotes').addEventListener('input', function() {
-        document.getElementById('charCount').textContent = this.value.length;
-    });
-
-    // تشغيل النظام عند تحميل الصفحة
+    // ============================================
+    // 4. INITIAL RENDER ON LOAD
+    // ============================================
     window.addEventListener('DOMContentLoaded', () => {
         renderInventory();
         renderStaff();
     });
 </script>
+
 </body>
 </html>

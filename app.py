@@ -4,7 +4,7 @@ import sqlite3
 import plotly.express as px
 from datetime import datetime
 from io import BytesIO
-
+ 
 # 1. تهيئة إعدادات الصفحة (يجب أن تُستدعى مرة واحدة فقط في أول الكود)
 st.set_page_config(
     page_title="نظام إدارة الجمعيات المتكامل",

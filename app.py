@@ -17,6 +17,11 @@
             --primary-light: rgba(37, 99, 235, 0.1);
             --bg-main: #f8fafc;
             --bg-card: #ffffff;
+    st.markdown(
+    """
+    <style>
+        :root {
+            /* تأكد أن الألوان السابقة مثل primary موجودة هنا داخل root */
             --text-main: #0f172a;
             --text-muted: #64748b;
             --border: #e2e8f0;
@@ -38,6 +43,11 @@
 
         html {
             scroll-behavior: smooth;
+        }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
         }
 
         body {

@@ -11,7 +11,7 @@ st.set_page_config(
 )
 
 # تطبيق ستايل CSS مخصص لتحسين المظهر والخطوط
-st.markdown("""
+unsafe_allow_html=True
     <style>
     .main { text-align: right; direction: rtl; }
     div.stButton > button:first-child {

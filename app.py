@@ -50,7 +50,6 @@ h1, h2, h3 { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
     justify-content: center;
     font-size: 24px;
     font-weight: bold;
-    font-family: 'Arial', sans-serif;
     box-shadow: 0 4px 8px rgba(31, 119, 180, 0.3);
 }
 .logo-text {
@@ -63,7 +62,6 @@ h1, h2, h3 { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
 .logo-subtext {
     font-size: 14px;
     color: #888;
-    font-weight: 400;
 }
 
 /* كرت الترحيب */
@@ -146,12 +144,11 @@ else:
         ["🏠 الشاشة الرئيسية", "💰 المصروفات اليومية", "👥 شؤون الموظفين والعهدة", "📦 جرد وإحصاء المكتب", "🚪 تسجيل الخروج"]
     )
     
-    # زر تسجيل الخروج
     if menu == "🚪 تسجيل الخروج":
         st.session_state.logged_in = False
         st.rerun()
 
-    # --- 1. الشاشة الرئيسية (Dashboard) ---
+    # --- 1. الشاشة الرئيسية مع لوحة التحليلات البيانية ---
     elif menu == "🏠 الشاشة الرئيسية":
         st.markdown("""
         <div class="welcome-card">
@@ -177,10 +174,17 @@ else:
             </div>
             """, unsafe_allow_html=True)
 
-        st.markdown("<br><br>", unsafe_allow_html=True)
-        st.info("💡 البيانات تُحفظ تلقائياً الآن. يمكنك إدارة المصروفات والكشوفات وتصديرها كملفات من القائمة الجانبية.")
+        st.markdown("<br><h3>📊 نظرة عامة على مصروفات النظام</h3>", unsafe_allow_html=True)
+        
+        if st.session_state.expenses:
+            df_all = pd.DataFrame(st.session_state.expenses)
+            # رسم بياني لتوزيع المصروفات حسب الفئة
+            df_chart = df_all.groupby("نوع السلعة")["السعر (شيكل)"].sum().reset_index()
+            st.bar_chart(data=df_chart, x="نوع السلعة", y="السعر (شيكل)", use_container_width=True)
+        else:
+            st.info("لا توجد بيانات مصروفات كافية لعرض الرسم البياني حالياً.")
 
-    # --- 2. قسم المصروفات اليومية والشهرية ---
+    # --- 2. قسم المصروفات اليومية والشهرية (مع الحذف) ---
     elif menu == "💰 المصروفات اليومية":
         st.title("💰 إدارة المصروفات اليومية والشهرية")
         st.markdown("---")
@@ -191,92 +195,92 @@ else:
             st.subheader("➕ إضافة مصروف جديد")
             exp_date = st.date_input("تاريخ الصرف", datetime.now())
             exp_types = st.multiselect("نوع السلعة / الخدمة", ["مواصلات", "مياه", "أخرى"], default=["مواصلات"])
-            exp_details = st.text_input("تفاصيل إضافية عن السلعة", placeholder="مثال: شراء مياه شرب للمكتب")
+            exp_details = st.text_input("تفاصيل إضافية عن السلعة")
             exp_price = st.number_input("السعر (بشيكل ₪)", min_value=0.0, step=1.0, format="%.2f")
             
             if st.button("حفظ المصروف"):
-                if not exp_types:
-                    st.warning("الرجاء اختيار نوع السلعة واحد على الأقل.")
-                elif exp_price <= 0:
-                    st.warning("الرجاء إدخال سعر صحيح أكبر من صفر.")
+                if not exp_types or exp_price <= 0:
+                    st.warning("الرجاء التحقق من البيانات المدخلة.")
                 else:
                     types_str = ", ".join(exp_types)
-                    month_key = exp_date.strftime("%Y-%m")
-                    
                     st.session_state.expenses.append({
+                        "id": datetime.now().strftime("%Y%m%d%H%M%S"),
                         "التاريخ": exp_date.strftime("%Y-%m-%d"),
-                        "الشهر المستهدف": month_key,
+                        "الشهر المستهدف": exp_date.strftime("%Y-%m"),
                         "نوع السلعة": types_str,
                         "التفاصيل": exp_details,
                         "السعر (شيكل)": exp_price
                     })
                     save_data('expenses.json', st.session_state.expenses)
-                    st.success("تم تسجيل المصروف وحفظه تلقائياً!")
+                    st.success("تم الحفظ!")
+                    st.rerun()
         
         with col2:
-            st.subheader("📊 كشوفات المصروفات الشهرية")
+            st.subheader("📊 كشوفات المصروفات")
             if st.session_state.expenses:
                 df_all = pd.DataFrame(st.session_state.expenses)
                 available_months = sorted(list(df_all["الشهر المستهدف"].unique()), reverse=True)
-                selected_month = st.selectbox("📂 اختر الشهر لعرض المصروفات:", available_months)
+                selected_month = st.selectbox("📂 اختر الشهر:", available_months)
                 
                 df_filtered = df_all[df_all["الشهر المستهدف"] == selected_month].copy()
-                df_display = df_filtered.drop(columns=["الشهر المستهدف"])
+                st.dataframe(df_filtered.drop(columns=["id", "الشهر المستهدف"]), use_container_width=True)
                 
-                st.dataframe(df_display, use_container_width=True)
-                
-                total_sum = df_filtered["السعر (شيكل)"].sum()
-                st.markdown(f"### 🧮 مجموع مصروفات شهر ({selected_month}): <span style='color:green; font-size:28px;'>{total_sum:.2f} ₪</span>", unsafe_allow_html=True)
-                
-                # تصدير التقرير
-                csv = df_display.to_csv(index=False).encode('utf-8-sig')
-                st.download_button(label="📥 تحميل كشف المصروفات الحالي (CSV)", data=csv, file_name=f"مصروفات_{selected_month}.csv", mime='text/csv')
-            else:
-                st.info("لا توجد مصروفات مسجلة في النظام حتى الآن.")
+                # خيار حذف مصروف معين برقم تعريفه
+                delete_id = st.selectbox("🗑️ اختر سطر لحذفه (حسب التفاصيل):", df_filtered["id"].tolist(), format_func=lambda x: next(item["التفاصيل"] for item in st.session_state.expenses if item["id"] == x))
+                if st.button("حذف السطر المحدد"):
+                    st.session_state.expenses = [item for item in st.session_state.expenses if item["id"] != delete_id]
+                    save_data('expenses.json', st.session_state.expenses)
+                    st.success("تم الحذف بنجاح!")
+                    st.rerun()
 
-    # --- 3. قسم شؤون الموظفين والعهدة ---
+    # --- 3. قسم شؤون الموظفين وتتبع العهدة المستردة ---
     elif menu == "👥 شؤون الموظفين والعهدة":
-        st.title("👥 إدارة الموظفين والعهدة الشخصية")
+        st.title("👥 إدارة الموظفين والعهدة والتتبع")
         st.markdown("---")
         
         col1, col2 = st.columns([1, 2])
         with col1:
-            st.subheader("➕ إضافة موظف وعهدة")
+            st.subheader("➕ إضافة موظف جديد")
             emp_name = st.text_input("اسم الموظف")
             emp_id = st.text_input("رقم الهوية")
             emp_phone = st.text_input("رقم الجوال")
             emp_title = st.text_input("المسمى الوظيفي")
             emp_program = st.selectbox("البرنامج التابع له", ["Shelter", "CVA", "WASH", "Program", "Administrative Assistant", "Manager"])
             emp_assets = st.multiselect("العهدة المستلمة", ["تيشيرت", "لاب توب", "أيباد", "قرطاسية", "أخرى"])
+            asset_status = st.selectbox("حالة العهدة الحالية", ["مستلمة بالكامل", "تم إرجاعها للمخزن"])
+            return_date = st.text_input("تاريخ الإرجاع (إن وجد)", placeholder="مثال: 2026-06-04")
             
             if st.button("حفظ بيانات الموظف"):
-                if not emp_name or not emp_id:
-                    st.warning("الرجاء إدخال اسم الموظف ورقم الهوية.")
-                else:
-                    assets_str = ", ".join(emp_assets) if emp_assets else "لا يوجد"
+                if emp_name and emp_id:
                     st.session_state.employees.append({
+                        "id": emp_id,
                         "اسم الموظف": emp_name,
                         "رقم الهوية": emp_id,
                         "رقم الجوال": emp_phone,
                         "المسمى الوظيفي": emp_title,
                         "البرنامج": emp_program,
-                        "العهدة المستلمة": assets_str
+                        "العهدة المستلمة": ", ".join(emp_assets),
+                        "حالة العهدة": asset_status,
+                        "تاريخ الإرجاع": return_date if return_date else "N/A"
                     })
                     save_data('employees.json', st.session_state.employees)
-                    st.success(f"تم حفظ بيانات الموظف {emp_name}!")
+                    st.success("تم الحفظ!")
+                    st.rerun()
                     
         with col2:
-            st.subheader("📋 كشف الموظفين والعهدة")
+            st.subheader("📋 كشف الموظفين وتتبع حالة العهد")
             if st.session_state.employees:
                 df_emp = pd.DataFrame(st.session_state.employees)
-                st.dataframe(df_emp, use_container_width=True)
+                st.dataframe(df_emp.drop(columns=["id"]), use_container_width=True)
                 
-                csv_emp = df_emp.to_csv(index=False).encode('utf-8-sig')
-                st.download_button(label="📥 تحميل كشف الموظفين (CSV)", data=csv_emp, file_name="كشف_الموظفين.csv", mime='text/csv')
-            else:
-                st.info("لا توجد بيانات موظفين مسجلة حالياً.")
+                delete_emp_id = st.selectbox("🗑️ اختر موظف لحذفه:", df_emp["id"].tolist(), format_func=lambda x: next(emp["اسم الموظف"] for emp in st.session_state.employees if emp["id"] == x))
+                if st.button("حذف الموظف المحدد"):
+                    st.session_state.employees = [emp for emp in st.session_state.employees if emp["id"] != delete_emp_id]
+                    save_data('employees.json', st.session_state.employees)
+                    st.success("تم الحذف!")
+                    st.rerun()
 
-    # --- 4. قسم جرد وإحصاء المكتب ---
+    # --- 4. قسم جرد وإحصاء المكتب مع خيار التعديل والحذف ---
     elif menu == "📦 جرد وإحصاء المكتب":
         st.title("📦 جرد وإحصاء محتويات المكتب")
         st.markdown("---")
@@ -289,24 +293,26 @@ else:
             item_notes = st.text_area("ملاحظات")
             
             if st.button("إضافة إلى الجرد"):
-                if not item_name:
-                    st.warning("الرجاء إدخال اسم المادة.")
-                else:
+                if item_name:
                     st.session_state.inventory.append({
+                        "id": item_name,
                         "اسم المادة / الغرض": item_name,
                         "الكمية المتوفرة": item_qty,
                         "ملاحظات": item_notes if item_notes else "لا يوجد"
                     })
                     save_data('inventory.json', st.session_state.inventory)
-                    st.success(f"تم إضافة {item_name} وحفظ الجرد!")
+                    st.success("تم الإضافة!")
+                    st.rerun()
                     
         with col2:
             st.subheader("📊 قائمة المواد المتوفرة بالمكتب")
             if st.session_state.inventory:
                 df_inv = pd.DataFrame(st.session_state.inventory)
-                st.dataframe(df_inv, use_container_width=True)
+                st.dataframe(df_inv.drop(columns=["id"]), use_container_width=True)
                 
-                csv_inv = df_inv.to_csv(index=False).encode('utf-8-sig')
-                st.download_button(label="📥 تحميل تقرير الجرد (CSV)", data=csv_inv, file_name="جرد_المكتب.csv", mime='text/csv')
-            else:
-                st.info("قائمة الجرد فارغة حالياً.")
+                delete_item_id = st.selectbox("🗑️ اختر مادة لحذفها:", df_inv["id"].tolist())
+                if st.button("حذف المادة المحددة"):
+                    st.session_state.inventory = [item for item in st.session_state.inventory if item["id"] != delete_item_id]
+                    save_data('inventory.json', st.session_state.inventory)
+                    st.success("تم الحذف!")
+                    st.rerun()

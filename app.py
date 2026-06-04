@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+import json
+import os
 from datetime import datetime
 
 # 1. إعدادات الصفحة والديزاين العام
@@ -25,7 +27,7 @@ div.stButton > button:first-child {
 .sidebar .sidebar-content { background-color: #f8f9fa; }
 h1, h2, h3 { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
 
-/* تصميم الشعار الاحترافي الافتراضي */
+/* تصميم الشعار الاحترافي */
 .logo-container {
     display: flex;
     align-items: center;
@@ -85,15 +87,26 @@ h1, h2, h3 { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
 </style>
 """, unsafe_allow_html=True)
 
-# 3. تهيئة الجلسات (Session State) لحفظ البيانات
+# 3. دالات إدارة وحفظ البيانات الدائمة (JSON)
+def load_data(filename):
+    if os.path.exists(filename):
+        with open(filename, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    return []
+
+def save_data(filename, data):
+    with open(filename, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
+
+# 4. تهيئة الجلسات وتحميل البيانات المخزنة تلقائياً
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 if 'expenses' not in st.session_state:
-    st.session_state.expenses = []
+    st.session_state.expenses = load_data('expenses.json')
 if 'employees' not in st.session_state:
-    st.session_state.employees = []
+    st.session_state.employees = load_data('employees.json')
 if 'inventory' not in st.session_state:
-    st.session_state.inventory = []
+    st.session_state.inventory = load_data('inventory.json')
 
 # --- نظام تسجيل الدخول ---
 if not st.session_state.logged_in:
@@ -138,9 +151,8 @@ else:
         st.session_state.logged_in = False
         st.rerun()
 
-    # --- 1. الشاشة الرئيسية المحدثة (Dashboard) ---
+    # --- 1. الشاشة الرئيسية (Dashboard) ---
     elif menu == "🏠 الشاشة الرئيسية":
-        # كرت ترحيبي بالإنجليزية
         st.markdown("""
         <div class="welcome-card">
             <h1 style="color: white; margin: 0; font-family: 'Century Gothic', sans-serif;">Hello my dear</h1>
@@ -148,9 +160,7 @@ else:
         </div>
         """, unsafe_allow_html=True)
         
-        # عرض معلومات الوقت والتاريخ في عمودين متساويين بعد إلغاء الطقس
         col1, col2 = st.columns(2)
-        
         with col1:
             st.markdown(f"""
             <div class="info-box">
@@ -168,9 +178,9 @@ else:
             """, unsafe_allow_html=True)
 
         st.markdown("<br><br>", unsafe_allow_html=True)
-        st.info("💡 يمكنك التنقل بين الأقسام المختلفة لإدارة المصروفات، الموظفين، أو جرد المكتب من خلال القائمة الجانبية.")
+        st.info("💡 البيانات تُحفظ تلقائياً الآن. يمكنك إدارة المصروفات والكشوفات وتصديرها كملفات من القائمة الجانبية.")
 
-    # --- 2. قسم المصروفات اليومية مع نظام الفرز الشهري التلقائي ---
+    # --- 2. قسم المصروفات اليومية والشهرية ---
     elif menu == "💰 المصروفات اليومية":
         st.title("💰 إدارة المصروفات اليومية والشهرية")
         st.markdown("---")
@@ -180,13 +190,7 @@ else:
         with col1:
             st.subheader("➕ إضافة مصروف جديد")
             exp_date = st.date_input("تاريخ الصرف", datetime.now())
-            
-            exp_types = st.multiselect(
-                "نوع السلعة / الخدمة",
-                ["مواصلات", "مياه", "أخرى"],
-                default=["مواصلات"]
-            )
-            
+            exp_types = st.multiselect("نوع السلعة / الخدمة", ["مواصلات", "مياه", "أخرى"], default=["مواصلات"])
             exp_details = st.text_input("تفاصيل إضافية عن السلعة", placeholder="مثال: شراء مياه شرب للمكتب")
             exp_price = st.number_input("السعر (بشيكل ₪)", min_value=0.0, step=1.0, format="%.2f")
             
@@ -206,15 +210,15 @@ else:
                         "التفاصيل": exp_details,
                         "السعر (شيكل)": exp_price
                     })
-                    st.success("تم تسجيل المصروف بنجاح!")
+                    save_data('expenses.json', st.session_state.expenses)
+                    st.success("تم تسجيل المصروف وحفظه تلقائياً!")
         
         with col2:
             st.subheader("📊 كشوفات المصروفات الشهرية")
-            
             if st.session_state.expenses:
                 df_all = pd.DataFrame(st.session_state.expenses)
                 available_months = sorted(list(df_all["الشهر المستهدف"].unique()), reverse=True)
-                selected_month = st.selectbox("📂 اختر الشهر لعرض المصروفات والمجموع الكلي:", available_months)
+                selected_month = st.selectbox("📂 اختر الشهر لعرض المصروفات:", available_months)
                 
                 df_filtered = df_all[df_all["الشهر المستهدف"] == selected_month].copy()
                 df_display = df_filtered.drop(columns=["الشهر المستهدف"])
@@ -223,6 +227,10 @@ else:
                 
                 total_sum = df_filtered["السعر (شيكل)"].sum()
                 st.markdown(f"### 🧮 مجموع مصروفات شهر ({selected_month}): <span style='color:green; font-size:28px;'>{total_sum:.2f} ₪</span>", unsafe_allow_html=True)
+                
+                # تصدير التقرير
+                csv = df_display.to_csv(index=False).encode('utf-8-sig')
+                st.download_button(label="📥 تحميل كشف المصروفات الحالي (CSV)", data=csv, file_name=f"مصروفات_{selected_month}.csv", mime='text/csv')
             else:
                 st.info("لا توجد مصروفات مسجلة في النظام حتى الآن.")
 
@@ -232,27 +240,18 @@ else:
         st.markdown("---")
         
         col1, col2 = st.columns([1, 2])
-        
         with col1:
             st.subheader("➕ إضافة موظف وعهدة")
             emp_name = st.text_input("اسم الموظف")
             emp_id = st.text_input("رقم الهوية")
             emp_phone = st.text_input("رقم الجوال")
             emp_title = st.text_input("المسمى الوظيفي")
-            
-            emp_program = st.selectbox(
-                "البرنامج التابع له",
-                ["Shelter", "CVA", "WASH", "Program", "Administrative Assistant", "Manager"]
-            )
-            
-            emp_assets = st.multiselect(
-                "العهدة التي تم استلامها من الجمعية",
-                ["تيشيرت", "لاب توب", "أيباد", "قرطاسية", "أخرى"]
-            )
+            emp_program = st.selectbox("البرنامج التابع له", ["Shelter", "CVA", "WASH", "Program", "Administrative Assistant", "Manager"])
+            emp_assets = st.multiselect("العهدة المستلمة", ["تيشيرت", "لاب توب", "أيباد", "قرطاسية", "أخرى"])
             
             if st.button("حفظ بيانات الموظف"):
                 if not emp_name or not emp_id:
-                    st.warning("الرجاء إدخال اسم الموظف ورقم الهوية على الأقل.")
+                    st.warning("الرجاء إدخال اسم الموظف ورقم الهوية.")
                 else:
                     assets_str = ", ".join(emp_assets) if emp_assets else "لا يوجد"
                     st.session_state.employees.append({
@@ -263,13 +262,17 @@ else:
                         "البرنامج": emp_program,
                         "العهدة المستلمة": assets_str
                     })
-                    st.success(f"تم تسجيل الموظف {emp_name} بنجاح!")
+                    save_data('employees.json', st.session_state.employees)
+                    st.success(f"تم حفظ بيانات الموظف {emp_name}!")
                     
         with col2:
             st.subheader("📋 كشف الموظفين والعهدة")
             if st.session_state.employees:
                 df_emp = pd.DataFrame(st.session_state.employees)
                 st.dataframe(df_emp, use_container_width=True)
+                
+                csv_emp = df_emp.to_csv(index=False).encode('utf-8-sig')
+                st.download_button(label="📥 تحميل كشف الموظفين (CSV)", data=csv_emp, file_name="كشف_الموظفين.csv", mime='text/csv')
             else:
                 st.info("لا توجد بيانات موظفين مسجلة حالياً.")
 
@@ -279,12 +282,11 @@ else:
         st.markdown("---")
         
         col1, col2 = st.columns([1, 2])
-        
         with col1:
-            st.subheader("➕ إضافة مادة/أصل للمكتب")
-            item_name = st.text_input("اسم المادة / الغرض", placeholder="مثال: كراسي، طابعات، ورق A4")
+            st.subheader("➕ إضافة مادة للمكتب")
+            item_name = st.text_input("اسم المادة / الغرض")
             item_qty = st.number_input("الكمية المتوفرة", min_value=0, step=1)
-            item_notes = st.text_area("ملاحظات (إن وجدت)", placeholder="مثال: تحتاج إلى صيانة، أو مخزون قارب على الانتهاء")
+            item_notes = st.text_area("ملاحظات")
             
             if st.button("إضافة إلى الجرد"):
                 if not item_name:
@@ -295,12 +297,16 @@ else:
                         "الكمية المتوفرة": item_qty,
                         "ملاحظات": item_notes if item_notes else "لا يوجد"
                     })
-                    st.success(f"تم إضافة {item_name} إلى قائمة الجرد.")
+                    save_data('inventory.json', st.session_state.inventory)
+                    st.success(f"تم إضافة {item_name} وحفظ الجرد!")
                     
         with col2:
             st.subheader("📊 قائمة المواد المتوفرة بالمكتب")
             if st.session_state.inventory:
                 df_inv = pd.DataFrame(st.session_state.inventory)
                 st.dataframe(df_inv, use_container_width=True)
+                
+                csv_inv = df_inv.to_csv(index=False).encode('utf-8-sig')
+                st.download_button(label="📥 تحميل تقرير الجرد (CSV)", data=csv_inv, file_name="جرد_المكتب.csv", mime='text/csv')
             else:
                 st.info("قائمة الجرد فارغة حالياً.")

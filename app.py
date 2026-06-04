@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-# إعدادات الصفحة والديزاين العام
+# 1. إعدادات الصفحة والديزاين العام
 st.set_page_config(
     page_title="نظام إدارة الجمعية المتكامل",
     page_icon="🏢",
@@ -10,23 +10,23 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# تطبيق ستايل CSS مخصص لتحسين المظهر والخطوط
-unsafe_allow_html=True
-    <style>
-    .main { text-align: right; direction: rtl; }
-    div.stButton > button:first-child {
-        background-color: #1f77b4;
-        color: white;
-        border-radius: 8px;
-        padding: 0.5rem 2rem;
-        font-size: 16px;
-    }
-    .sidebar .sidebar-content { background-color: #f8f9fa; }
-    h1, h2, h3 { color: #1f77b4; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-    </style>
-""", unsafe_style_html=True)
+# 2. تطبيق ستايل CSS مخصص لتحسين المظهر والخطوط والاتجاه من اليمين لليسار
+st.markdown("""
+<style>
+.main { text-align: right; direction: rtl; }
+div.stButton > button:first-child {
+    background-color: #1f77b4;
+    color: white;
+    border-radius: 8px;
+    padding: 0.5rem 2rem;
+    font-size: 16px;
+}
+.sidebar .sidebar-content { background-color: #f8f9fa; }
+h1, h2, h3 { color: #1f77b4; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+</style>
+""", unsafe_allow_html=True)
 
-# تهيئة الجلسات (Session State) لحفظ البيانات مؤقتاً أثناء التشغيل
+# 3. تهيئة الجلسات (Session State) لحفظ البيانات مؤقتاً أثناء التشغيل
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 if 'expenses' not in st.session_state:
@@ -36,9 +36,9 @@ if 'employees' not in st.session_state:
 if 'inventory' not in st.session_state:
     st.session_state.inventory = []
 
-# --- 1. نظام تسجيل الدخول ---
+# --- نظام تسجيل الدخول ---
 if not st.session_state.logged_in:
-    st.markdown("<h1 style='text-align: center;'>🔒 تسجيل الدخول إلى النظام</h1>", unsafe_style_html=True)
+    st.markdown("<h1 style='text-align: center;'>🔒 تسجيل الدخول إلى النظام</h1>", unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
@@ -57,8 +57,8 @@ if not st.session_state.logged_in:
 # --- بعد تسجيل الدخول بنجاح ---
 else:
     # القائمة الجانبية للتنقل
-    st.sidebar.markdown("<h2 style='text-align: center;'>📋 القائمة الرئيسية</h2>", unsafe_style_html=True)
-    st.sidebar.markdown(f"**مرحباً بك:** {st.session_state.get('username', 'aymanyaghi')}")
+    st.sidebar.markdown("<h2 style='text-align: center;'>📋 القائمة الرئيسية</h2>", unsafe_allow_html=True)
+    st.sidebar.markdown(f"**مرحباً بك:** aymanyaghi")
     
     menu = st.sidebar.radio(
         "اختر القسم:",
@@ -70,7 +70,7 @@ else:
         st.session_state.logged_in = False
         st.rerun()
 
-    # --- 2. قسم المصروفات اليومية ---
+    # --- قسم المصروفات اليومية ---
     elif menu == "💰 المصروفات اليومية":
         st.title("💰 إدارة المصروفات اليومية")
         st.markdown("---")
@@ -114,11 +114,11 @@ else:
                 
                 # حساب المجموع الكلي تلقائياً
                 total_sum = df_exp["السعر (شيكل)"].sum()
-                st.markdown(f"### 🧮 المجموع الكلي: <span style='color:green; font-size:28px;'>{total_sum:.2f} ₪</span>", unsafe_style_html=True)
+                st.markdown(f"### 🧮 المجموع الكلي: <span style='color:green; font-size:28px;'>{total_sum:.2f} ₪</span>", unsafe_allow_html=True)
             else:
                 st.info("لا توجد مصروفات مسجلة بعد اليوم.")
 
-    # --- 3. قسم شؤون الموظفين والعهدة ---
+    # --- قسم شؤون الموظفين والعهدة ---
     elif menu == "👥 شؤون الموظفين والعهدة":
         st.title("👥 إدارة الموظفين والعهدة الشخصية")
         st.markdown("---")
@@ -167,7 +167,7 @@ else:
             else:
                 st.info("لا توجد بيانات موظفين مسجلة حالياً.")
 
-    # --- 4. قسم جرد وإحصاء المكتب ---
+    # --- قسم جرد وإحصاء المكتب ---
     elif menu == "📦 جرد وإحصاء المكتب":
         st.title("📦 جرد وإحصاء محتويات المكتب")
         st.markdown("---")
@@ -178,7 +178,7 @@ else:
             st.subheader("➕ إضافة مادة/أصل للمكتب")
             item_name = st.text_input("اسم المادة / الغرض", placeholder="مثال: كراسي، طابعات، ورق A4")
             item_qty = st.number_input("الكمية المتوفرة", min_value=0, step=1)
-            item_notes = st.text_area("ملاحظات (إن وجدت)", placeholder="مثال: تحتاج إلى صيانة، أو مخزون قار ب على الانتهاء")
+            item_notes = st.text_area("ملاحظات (إن وجدت)", placeholder="مثال: تحتاج إلى صيانة، أو مخزون قارب على الانتهاء")
             
             if st.button("إضافة إلى الجرد"):
                 if not item_name:

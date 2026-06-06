@@ -11,7 +11,7 @@ from openpyxl.utils import get_column_letter
 
 # 1. إعدادات الصفحة والديزاين المتجاوب مع اللاب توب والجوال
 st.set_page_config(
-    page_title="نظام إدارة الجمعية المتكامل",
+    page_title="نظام إدارة الجمعية المتكامل - نسخة متطورة",
     page_icon="🏢",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -21,8 +21,12 @@ st.set_page_config(
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
-CORRECT_USERNAME = "aymanyaghi"
-CORRECT_PASSWORD_HASH = "5994471abb01112afcc18159f6cc74b4f511b99806da59b3caf5a9c173cacfc5" 
+# قاعدة بيانات المستخدمين والصلاحيات المتعددة (النظام رقم 4 بالكامل)
+USERS = {
+    "aymanyaghi": {"password": hash_password("12345"), "role": "مدير عام", "icon": "👑"},
+    "accountant": {"password": hash_password("fin123"), "role": "محاسب مالي", "icon": "💰"},
+    "storekeeper": {"password": hash_password("store123"), "role": "أمين المخزن", "icon": "📦"}
+}
 
 # ستايل واجهة المستخدم
 st.markdown("""
@@ -66,7 +70,7 @@ h1, h2, h3, p, span, div {
     font-weight: bold;
 }
 .logo-text {
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 800;
     color: #1f77b4;
 }
@@ -93,7 +97,7 @@ def save_data(filename, data):
     with open(filename, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
 
-# دالة استخراج ملف Excel بتنسيق ملون وتصفية تلقائية ودوال رياضية وتواقيع
+# دالة استخراج ملف Excel الاحترافي مع دعم العملات المختلفة
 def export_to_styled_excel(dataframe, title_report="تقرير", is_transport=False):
     output = io.BytesIO()
     wb = Workbook()
@@ -149,10 +153,10 @@ def export_to_styled_excel(dataframe, title_report="تقرير", is_transport=Fa
     end_data_row = current_row - 1
     ws.auto_filter.ref = f"A{start_data_row-1}:{get_column_letter(len(columns))}{end_data_row}"
     
-    if is_transport and "المبلغ بالشيكل" in dataframe.columns:
-        amount_col_idx = dataframe.columns.get_loc("المبلغ بالشيكل") + 1
+    if is_transport and "المبلغ" in dataframe.columns:
+        amount_col_idx = dataframe.columns.get_loc("المبلغ") + 1
         current_row += 1
-        ws.cell(row=current_row, column=amount_col_idx-1, value="المبلغ الإجمالي بالشيكل:").font = Font(name="Segoe UI", size=10, bold=True)
+        ws.cell(row=current_row, column=amount_col_idx-1, value="الإجمالي الفعلي:").font = Font(name="Segoe UI", size=10, bold=True)
         sum_cell = ws.cell(row=current_row, column=amount_col_idx, value=f"=SUM({get_column_letter(amount_col_idx)}{start_data_row}:{get_column_letter(amount_col_idx)}{end_data_row})")
         sum_cell.font = Font(name="Segoe UI", size=11, bold=True)
         
@@ -169,186 +173,228 @@ def export_to_styled_excel(dataframe, title_report="تقرير", is_transport=Fa
 
 # 3. تهيئة قواعد البيانات المحلية
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
+if 'user_role' not in st.session_state: st.session_state.user_role = ""
+if 'user_fullname' not in st.session_state: st.session_state.user_fullname = ""
+
 if 'expenses' not in st.session_state: st.session_state.expenses = load_data('expenses.json')
 if 'employees' not in st.session_state: st.session_state.employees = load_data('employees.json')
 if 'inventory' not in st.session_state: st.session_state.inventory = load_data('inventory.json')
 if 'transport_records' not in st.session_state: st.session_state.transport_records = load_data('transport_records.json')
 
-# 4. واجهة تسجيل الدخول الآمنة
+# 4. واجهة تسجيل الدخول الآمنة بالصلاحيات
 if not st.session_state.logged_in:
-    st.markdown("<h2 style='text-align: center;'>🔒 نظام إدارة جمعية الحياة والأمل</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center;'>🔒 نظام بوابة الحياة والأمل الإلكترونية</h2>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         username = st.text_input("👤 اسم المستخدم")
         password = st.text_input("🔑 كلمة المرور", type="password")
         if st.button("🚪 دخول النظام"):
-            if username == CORRECT_USERNAME and hash_password(password) == CORRECT_PASSWORD_HASH:
+            if username in USERS and hash_password(password) == USERS[username]["password"]:
                 st.session_state.logged_in = True
+                st.session_state.user_role = USERS[username]["role"]
+                st.session_state.user_fullname = username
+                st.success(f"مرحباً بك بصلاحية: {st.session_state.user_role}")
                 st.rerun()
             else:
-                st.error("❌ خطأ في صلاحيات الدخول الممنوحة!")
+                st.error("❌ خطأ في بيانات الدخول الممنوحة!")
 else:
-    st.sidebar.markdown("""
+    # القائمة الجانبية بناءً على صلاحيات الحساب
+    st.sidebar.markdown(f"""
     <div class="logo-container">
         <div class="logo-icon">🏢</div>
-        <div class="logo-text">جمعية الحياة والأمل</div>
+        <div class="logo-text">جمعية الحياة والأمل<br><small>👤 {st.session_state.user_fullname} ({st.session_state.user_role})</small></div>
     </div>
     """, unsafe_allow_html=True)
     
-    menu = st.sidebar.radio(
-        "📂 تصفح أقسام النظام:",
-        ["🏠 الشاشة الرئيسية", "🚗 كشف المواصلات (ملفك المرفق)", "💰 المصروفات العامة", "👥 شؤون الموظفين والعهد", "📦 جرد ومحتويات المخزن", "🚪 خروج"]
-    )
+    # تحديد صفحات النظام المسموحة لكل دور
+    available_pages = ["🏠 الشاشة الرئيسية"]
+    
+    if st.session_state.user_role in ["مدير عام", "محاسب مالي"]:
+        available_pages.extend(["🚗 كشف المواصلات (ملفك المرفق)", "💰 المصروفات العامة"])
+        
+    if st.session_state.user_role in ["مدير عام", "أمين المخزن"]:
+        available_pages.extend(["👥 شؤون الموظفين والعهد", "📦 جرد ومحتويات المخزن"])
+        
+    available_pages.append("🚪 خروج")
+    
+    menu = st.sidebar.radio("📂 تصفح أقسام النظام الحالية:", available_pages)
     
     if menu == "🚪 خروج":
         st.session_state.logged_in = False
+        st.session_state.user_role = ""
+        st.session_state.user_fullname = ""
         st.rerun()
         
     elif menu == "🏠 الشاشة الرئيسية":
         st.markdown("<div class='welcome-card'><h3>لوحة التحكم والتحليلات البيانية المتكاملة</h3></div>", unsafe_allow_html=True)
-        st.write(f"📅 **تاريخ اليوم:** {datetime.now().strftime('%Y-%m-%d')} | ⏰ **الوقت الحالي:** {datetime.now().strftime('%I:%M %p')}")
+        st.write(f"📅 **التاريخ:** {datetime.now().strftime('%Y-%m-%d')} | ⏰ **الوقت:** {datetime.now().strftime('%I:%M %p')}")
+        
+        # ⚠️ نظام التنبيه بنقص المخزون في الشاشة الرئيسية ليرى الكل النقص
+        low_stock_items = [item for item in st.session_state.inventory if item.get("الكمية", 0) <= item.get("الحد الأدنى", 0)]
+        if low_stock_items:
+            st.error("🚨 **تنبيه نقص المخزون السريع:** المواد التالية وصلت إلى حد الأمان أو أقل، يرجى تزويد المخزن:")
+            for item in low_stock_items:
+                st.write(f"⚠️ **{item['اسم المادة']}** -> المتوفر حالياً: `{item['الكمية']}` حبة فقط (حد الأمان المعتمد: {item['الحد الأدنى']})")
         
         c1, c2, c3 = st.columns(3)
-        c1.metric("🚗 حركات المواصلات", len(st.session_state.transport_records))
-        c2.metric("👥 الموظفين المسجلين", len(st.session_state.employees))
-        c3.metric("💰 قيود المصروفات العامة", len(st.session_state.expenses))
+        c1.metric("🚗 حركات المواصلات المؤرشفة", len(st.session_state.transport_records))
+        c2.metric("👥 العهد الموثقة للموظفين", len(st.session_state.employees))
+        c3.metric("💰 قيود الصرف المالي العام", len(st.session_state.expenses))
         
         if st.session_state.transport_records:
-            st.markdown("### 📊 رسم بياني لمبالغ المواصلات لكل موظف")
+            st.markdown("### 📊 إجمالي حركات المواصلات حسب العملة المحددة")
             df = pd.DataFrame(st.session_state.transport_records)
-            st.bar_chart(df.groupby("اسم الموظف")["المبلغ بالشيكل"].sum())
+            if "العملة" in df.columns and "المبلغ" in df.columns:
+                currency_summary = df.groupby("العملة")["المبلغ"].sum().reset_index()
+                st.dataframe(currency_summary, use_container_width=True)
 
     elif menu == "🚗 كشف المواصلات (ملفك المرفق)":
-        st.title("🚗 نموذج كشف مواصلات الموظفين الفردي")
+        st.title("🚗 نموذج كشف مواصلات الموظفين الفردي التابع للجمعية")
         col1, col2 = st.columns([1, 2])
         with col1:
-            st.subheader("➕ إضافة حقل جديد")
+            st.subheader("➕ إضافة حركة جديدة")
             emp = st.text_input("👤 اسم الموظف")
             job = st.text_input("💼 المسمى الوظيفي")
             day = st.selectbox("📆 اليوم", ["السبت", "الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة"])
             dt = st.date_input("📅 التاريخ", datetime.now(), key="trans_date")
             fr = st.text_input("📍 من")
             to = st.text_input("🏁 إلى")
-            amt = st.number_input("💰 المبلغ بالشيكل", min_value=0.0, step=0.5)
-            rsn = st.text_area("🔍 سبب الحركة")
+            amt = st.number_input("💰 المبلغ المحدد", min_value=0.0, step=0.5)
+            curr = st.selectbox("💱 تحديد العملة", ["شيكل", "دولار أمريكي", "دينار أردني"], key="trans_curr")
+            rsn = st.text_area("🔍 سبب الحركة والمشروع الممول")
             
-            if st.button("💾 ترحيل الحركة"):
+            if st.button("💾 ترحيل القيد"):
                 if emp and amt > 0:
                     st.session_state.transport_records.append({
-                        "اسم الموظف": emp, "المسمى الوظيفي": job,
-                        "اليوم": day, "التاريخ": dt.strftime("%Y-%m-%d"), "من": fr, "إلى": to, "المبلغ بالشيكل": amt, "سبب الحركة": rsn
+                        "اسم الموظف": emp, "المسمى الوظيفي": job, "اليوم": day, 
+                        "التاريخ": dt.strftime("%Y-%m-%d"), "من": fr, "إلى": to, 
+                        "المبلغ": amt, "العملة": curr, "سبب الحركة": rsn
                     })
                     save_data('transport_records.json', st.session_state.transport_records)
-                    st.success("✅ تم حفظ الحركة بنجاح")
+                    st.success("✅ تم حفظ قيد المواصلات بنجاح")
                     st.rerun()
         with col2:
-            st.subheader("🔍 استعراض الفلترة الفردية والتنزيل الملون")
+            st.subheader("🔍 الفلترة الفردية والتنزيل الملون المعتمد")
             if st.session_state.transport_records:
                 df_t = pd.DataFrame(st.session_state.transport_records)
-                sel_emp = st.selectbox("🎯 اختر الموظف لفلترة وعرض كشفه:", df_t["اسم الموظف"].unique())
+                sel_emp = st.selectbox("🎯 اختر اسم الموظف لعرض الكشف الفردي ملوّن:", df_t["اسم الموظف"].unique())
                 df_res = df_t[df_t["اسم الموظف"] == sel_emp].copy()
                 
                 st.dataframe(df_res, use_container_width=True)
-                st.metric("📊 إجمالي المستحق للشخص", f"{df_res['المبلغ بالشيكل'].sum()} شيكل")
                 
                 excel_file = export_to_styled_excel(df_res, title_report=sel_emp, is_transport=True)
                 st.download_button(
-                    label="📥 تنزيل الكشف بصيغة Excel (ملون ومفلتر وتلقائي)",
+                    label=f"📥 تنزيل كشف الموظف {sel_emp} بصيغة Excel الملونة",
                     data=excel_file,
                     file_name=f"كشف_مواصلات_{sel_emp}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
             else:
-                st.info("لا توجد بيانات مسجلة حالياً.")
+                st.info("لا توجد بيانات مواصلات مسجلة حالياً.")
 
     elif menu == "💰 المصروفات العامة":
-        st.title("💰 إدارة البنود المالية العمومية")
+        st.title("💰 إدارة البنود المالية العمومية والمشاريع")
         col1, col2 = st.columns([1, 2])
         with col1:
-            st.subheader("➕ إضافة مصروف")
+            st.subheader("➕ تقييد مصروف عام")
             exp_date = st.date_input("📅 التاريخ", datetime.now(), key="exp_date")
-            exp_item = st.text_input("🏷️ البند / السلعة")
-            exp_details = st.text_input("📑 التفاصيل")
-            exp_price = st.number_input("💸 السعر بالشيكل", min_value=0.0, step=1.0)
-            if st.button("💾 حفظ المصروف"):
+            exp_item = st.text_input("🏷️ البند / السلعة المصروفة")
+            exp_details = st.text_input("📑 تفاصيل وجهة الصرف")
+            exp_price = st.number_input("💸 القيمة والشدة", min_value=0.0, step=1.0)
+            exp_curr = st.selectbox("💱 العملة المالية", ["شيكل", "دولار أمريكي", "دينار أردني"], key="exp_curr")
+            if st.button("💾 ترحيل للمصاريف العمومية"):
                 if exp_item and exp_price > 0:
                     st.session_state.expenses.append({
-                        "التاريخ": exp_date.strftime("%Y-%m-%d"),
-                        "نوع السلعة": exp_item, "التفاصيل": exp_details, "السعر (شيكل)": exp_price
+                        "التاريخ": exp_date.strftime("%Y-%m-%d"), "نوع السلعة": exp_item, 
+                        "التفاصيل": exp_details, "السعر": exp_price, "العملة": exp_curr
                     })
                     save_data('expenses.json', st.session_state.expenses)
-                    st.success("✅ تم حفظ البند المالي")
+                    st.success("✅ تم حفظ البند المالي داخل النظام")
                     st.rerun()
         with col2:
-            st.subheader("📋 كشف المصروفات والتحميل")
+            st.subheader("📋 كشوفات المصروفات الحالية للجمعية")
             if st.session_state.expenses:
                 df_e = pd.DataFrame(st.session_state.expenses)
                 st.dataframe(df_e, use_container_width=True)
                 excel_exp = export_to_styled_excel(df_e, title_report="المصروفات العامة", is_transport=False)
                 st.download_button(
-                    label="📥 تحميل كشف المصروفات (Excel ملون)",
+                    label="📥 تحميل كشف المصروفات الإجمالي (Excel)",
                     data=excel_exp,
                     file_name="المصروفات_العامة.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
-            else: st.info("لا توجد مصروفات مسجلة.")
+            else: st.info("سجل المصروفات العمومية فارغ.")
         
     elif menu == "👥 شؤون الموظفين والعهد":
-        st.title("👥 إدارة سجلات العهد والأصول للموظفين")
+        st.title("👥 إدارة سجلات العهد والأصول المتطورة")
         col1, col2 = st.columns([1, 2])
         with col1:
-            st.subheader("➕ إضافة موظف وعهدة")
-            e_name = st.text_input("🤵 اسم الموظف")
-            e_id = st.text_input("💳 رقم الهوية")
-            e_asset = st.text_input("📦 العهدة المستلمة")
-            e_status = st.selectbox("🔄 الحالة", ["مستلمة", "مرجعة"])
-            if st.button("💾 حفظ الموظف"):
+            st.subheader("➕ توثيق عهدة موظف تفصيلية")
+            e_name = st.text_input("🤵 اسم الموظف الثلاثي")
+            e_id = st.text_input("💳 رقم الهوية الشخصية")
+            e_phone = st.text_input("📞 رقم الجوال للاتصال")
+            e_contract = st.selectbox("📜 نوع عقد العمل للتوثيق", ["عقد محدد المدة", "يومي / بطالة", "تطوع مسجل"])
+            e_asset = st.text_input("📦 طبيعة العهدة (جهاز، لابتوب، أثاث...)")
+            e_curr = st.selectbox("💱 قيمة العهدة المقدرة بعملة", ["شيكل", "دولار أمريكي", "دينار أردني"])
+            e_val = st.number_input("💰 القيمة المقدرة للعهدة", min_value=0.0)
+            e_date_start = st.date_input("📅 تاريخ الاستلام الفعلي للعهدة", datetime.now())
+            e_date_end = st.date_input("📅 تاريخ الإرجاع المتوقع أو إنهاء الخدمة", datetime.now())
+            e_status = st.selectbox("🔄 الحالة الحالية للعهدة في السجل", ["مستلمة وفي عهدته", "تم استردادها بأمان"])
+            
+            if st.button("💾 ترحيل بيانات العهدة"):
                 if e_name and e_id:
                     st.session_state.employees.append({
-                        "اسم الموظف": e_name, "رقم الهوية": e_id, "العهدة": e_asset, "الحالة": e_status
+                        "اسم الموظف": e_name, "رقم الهوية": e_id, "رقم الجوال": e_phone, 
+                        "نوع العقد": e_contract, "العهدة المستلمة": e_asset, "القيمة": e_val, 
+                        "العملة": e_curr, "تاريخ الاستلام": e_date_start.strftime("%Y-%m-%d"), 
+                        "تاريخ الإرجاع المتوقع": e_date_end.strftime("%Y-%m-%d"), "الحالة": e_status
                     })
                     save_data('employees.json', st.session_state.employees)
-                    st.success("✅ تم حفظ السجل بنجاح")
+                    st.success("✅ تم حفظ وتأريخ بيانات العهدة في سجل الموظفين")
                     st.rerun()
         with col2:
-            st.subheader("📋 قائمة العهد الحالية")
+            st.subheader("📋 كشف العهد والأصول والأمانات الحالية")
             if st.session_state.employees:
                 df_emp = pd.DataFrame(st.session_state.employees)
                 st.dataframe(df_emp, use_container_width=True)
-                excel_emp = export_to_styled_excel(df_emp, title_report="سجلات العهد", is_transport=False)
+                excel_emp = export_to_styled_excel(df_emp, title_report="سجلات العهد والأصول", is_transport=False)
                 st.download_button(
-                    label="📥 تحميل كشف العهد (Excel ملون)",
+                    label="📥 تحميل كشف سجلات العهد الكامل (Excel)",
                     data=excel_emp,
-                    file_name="كشف_العهد.xlsx",
+                    file_name="كشف_العهد_الرسمي.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
-            else: st.info("لا يوجد موظفين مسجلين.")
+            else: st.info("لا يوجد موظفين مقيدين في قائمة الأصول والعهد حالياً.")
         
     elif menu == "📦 جرد ومحتويات المخزن":
-        st.title("📦 موجودات ومخازن الجمعية")
+        st.title("📦 جرد مستودعات ومخازن الجمعية الذكي")
         col1, col2 = st.columns([1, 2])
         with col1:
-            st.subheader("➕ إضافة مادة للمخزن")
-            i_name = st.text_input("📦 اسم المادة")
-            i_qty = st.number_input("🔢 الكمية المتوفرة", min_value=0, step=1)
-            if st.button("💾 حفظ في الجرد"):
+            st.subheader("➕ توريد مادة جديدة للمخزن")
+            i_name = st.text_input("📦 اسم المادة أو الصنف للتخزين")
+            i_qty = st.number_input("🔢 الكمية الموردة الحالية", min_value=0, step=1)
+            i_min = st.number_input("🚨 حد الأمان الأدنى (نظام التنبيه)", min_value=1, step=1, help="إذا وصلت الكمية لهذا الرقم أو أقل، سيقوم النظام بتنبيهك تلقائياً")
+            if st.button("💾 ترحيل صنف للجرد الفعلي"):
                 if i_name:
                     st.session_state.inventory.append({
-                        "اسم المادة": i_name, "الكمية": i_qty
+                        "اسم المادة": i_name, "الكمية": i_qty, "الحد الأدنى": i_min
                     })
                     save_data('inventory.json', st.session_state.inventory)
-                    st.success("✅ تم الإضافة للجرد")
+                    st.success("✅ تم تسجيل وتوريد الصنف بنجاح")
                     st.rerun()
         with col2:
-            st.subheader("📋 كشف الجرد الفعلي")
+            st.subheader("📋 جدول جرد الأصناف مع نظام مراقبة مستويات الأمان")
             if st.session_state.inventory:
                 df_i = pd.DataFrame(st.session_state.inventory)
+                
+                # إظهار جدول الأصناف الملون لسهولة المعاينة وتتبع حالة المخزون
                 st.dataframe(df_i, use_container_width=True)
-                excel_inv = export_to_styled_excel(df_i, title_report="جرد المخزن", is_transport=False)
+                
+                excel_inv = export_to_styled_excel(df_i, title_report="جرد وموجودات المخزن", is_transport=False)
                 st.download_button(
-                    label="📥 تحميل كشف الجرد (Excel ملون)",
+                    label="📥 تحميل مستند الجرد النهائي (Excel)",
                     data=excel_inv,
-                    file_name="جرد_المخزن.xlsx",
+                    file_name="جرد_المخزن_الفعلي.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
-            else: st.info("المخزن فارغ حالياً.")
+            else: st.info("مستودع مخزن الجمعية فارغ بانتظار التوريد.")

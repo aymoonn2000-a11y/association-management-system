@@ -21,7 +21,7 @@ st.set_page_config(
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
-# قاعدة بيانات المستخدمين والصلاحيات المتعددة (النظام رقم 4 بالكامل)
+# قاعدة بيانات المستخدمين والصلاحيات المتعددة
 USERS = {
     "aymanyaghi": {"password": hash_password("12345"), "role": "مدير عام", "icon": "👑"},
     "accountant": {"password": hash_password("fin123"), "role": "محاسب مالي", "icon": "💰"},
@@ -81,6 +81,13 @@ h1, h2, h3, p, span, div {
     border-radius: 15px;
     text-align: center;
     margin-bottom: 25px;
+}
+.log-box {
+    background-color: #f9f9f9;
+    padding: 15px;
+    border-radius: 8px;
+    border-right: 5px solid #ff4b4b;
+    margin-bottom: 15px;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -180,8 +187,9 @@ if 'expenses' not in st.session_state: st.session_state.expenses = load_data('ex
 if 'employees' not in st.session_state: st.session_state.employees = load_data('employees.json')
 if 'inventory' not in st.session_state: st.session_state.inventory = load_data('inventory.json')
 if 'transport_records' not in st.session_state: st.session_state.transport_records = load_data('transport_records.json')
+if 'login_logs' not in st.session_state: st.session_state.login_logs = load_data('login_logs.json')
 
-# 4. واجهة تسجيل الدخول الآمنة بالصلاحيات
+# 4. واجهة تسجيل الدخول الآمنة بالصلاحيات مع رصد حركات الدخول
 if not st.session_state.logged_in:
     st.markdown("<h2 style='text-align: center;'>🔒 نظام بوابة الحياة والأمل الإلكترونية</h2>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -193,6 +201,18 @@ if not st.session_state.logged_in:
                 st.session_state.logged_in = True
                 st.session_state.user_role = USERS[username]["role"]
                 st.session_state.user_fullname = username
+                
+                # 📝 تعديل ذكي: رصد حركة الدخول بالوقت والتاريخ واليوم في حال كان المستخدم accountant أو storekeeper
+                if username in ["accountant", "storekeeper"]:
+                    new_log = {
+                        "المستخدم": username,
+                        "الصلاحية": USERS[username]["role"],
+                        "التاريخ": datetime.now().strftime("%Y-%m-%d"),
+                        "الوقت": datetime.now().strftime("%I:%M:%S %p")
+                    }
+                    st.session_state.login_logs.append(new_log)
+                    save_data('login_logs.json', st.session_state.login_logs)
+                
                 st.success(f"مرحباً بك بصلاحية: {st.session_state.user_role}")
                 st.rerun()
             else:
@@ -206,7 +226,6 @@ else:
     </div>
     """, unsafe_allow_html=True)
     
-    # تحديد صفحات النظام المسموحة لكل دور
     available_pages = ["🏠 الشاشة الرئيسية"]
     
     if st.session_state.user_role in ["مدير عام", "محاسب مالي"]:
@@ -229,7 +248,30 @@ else:
         st.markdown("<div class='welcome-card'><h3>لوحة التحكم والتحليلات البيانية المتكاملة</h3></div>", unsafe_allow_html=True)
         st.write(f"📅 **التاريخ:** {datetime.now().strftime('%Y-%m-%d')} | ⏰ **الوقت:** {datetime.now().strftime('%I:%M %p')}")
         
-        # ⚠️ نظام التنبيه بنقص المخزون في الشاشة الرئيسية ليرى الكل النقص
+        # 🚨 نظام مراقبة المستخدمين الخاص بالمدير العام فقط (aymanyaghi)
+        if st.session_state.user_fullname == "aymanyaghi":
+            st.markdown("### 🔔 نظام تنبيه ومراقبة دخول المستخدمين للمنظومة")
+            
+            # حساب إجمالي عدد المرات
+            df_logs = pd.DataFrame(st.session_state.login_logs) if st.session_state.login_logs else pd.DataFrame()
+            
+            count_acc = len(df_logs[df_logs["المستخدم"] == "accountant"]) if not df_logs.empty else 0
+            count_store = len(df_logs[df_logs["المستخدم"] == "storekeeper"]) if not df_logs.empty else 0
+            
+            # بطاقات إحصائية سريعة للمدير
+            col_log1, col_log2 = st.columns(2)
+            col_log1.metric("📊 مرات دخول المحاسب (accountant)", f"{count_acc} مرات")
+            col_log2.metric("📊 مرات دخول أمين المخزن (storekeeper)", f"{count_store} مرات")
+            
+            # زر إظهار التقرير التفصيلي للوقت والتاريخ
+            if st.checkbox("🔍 عرض سجل التواريخ والأوقات التفصيلي لحركات الدخول"):
+                if not df_logs.empty:
+                    st.dataframe(df_logs, use_container_width=True)
+                else:
+                    st.info("لم يقم أي مستخدم بالدخول بعد منذ تفعيل نظام الرصد.")
+            st.markdown("---")
+
+        # نظام التنبيه بنقص المخزون للكل
         low_stock_items = [item for item in st.session_state.inventory if item.get("الكمية", 0) <= item.get("الحد الأدنى", 0)]
         if low_stock_items:
             st.error("🚨 **تنبيه نقص المخزون السريع:** المواد التالية وصلت إلى حد الأمان أو أقل، يرجى تزويد المخزن:")
@@ -279,7 +321,6 @@ else:
                 df_t = pd.DataFrame(st.session_state.transport_records)
                 sel_emp = st.selectbox("🎯 اختر اسم الموظف لعرض الكشف الفردي ملوّن:", df_t["اسم الموظف"].unique())
                 df_res = df_t[df_t["اسم الموظف"] == sel_emp].copy()
-                
                 st.dataframe(df_res, use_container_width=True)
                 
                 excel_file = export_to_styled_excel(df_res, title_report=sel_emp, is_transport=True)
@@ -373,7 +414,7 @@ else:
             st.subheader("➕ توريد مادة جديدة للمخزن")
             i_name = st.text_input("📦 اسم المادة أو الصنف للتخزين")
             i_qty = st.number_input("🔢 الكمية الموردة الحالية", min_value=0, step=1)
-            i_min = st.number_input("🚨 حد الأمان الأدنى (نظام التنبيه)", min_value=1, step=1, help="إذا وصلت الكمية لهذا الرقم أو أقل، سيقوم النظام بتنبيهك تلقائياً")
+            i_min = st.number_input("🚨 حد الأمان الأدنى (نظام التنبيه)", min_value=1, step=1)
             if st.button("💾 ترحيل صنف للجرد الفعلي"):
                 if i_name:
                     st.session_state.inventory.append({
@@ -386,10 +427,7 @@ else:
             st.subheader("📋 جدول جرد الأصناف مع نظام مراقبة مستويات الأمان")
             if st.session_state.inventory:
                 df_i = pd.DataFrame(st.session_state.inventory)
-                
-                # إظهار جدول الأصناف الملون لسهولة المعاينة وتتبع حالة المخزون
                 st.dataframe(df_i, use_container_width=True)
-                
                 excel_inv = export_to_styled_excel(df_i, title_report="جرد وموجودات المخزن", is_transport=False)
                 st.download_button(
                     label="📥 تحميل مستند الجرد النهائي (Excel)",
